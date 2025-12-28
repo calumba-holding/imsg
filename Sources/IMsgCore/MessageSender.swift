@@ -1,0 +1,111 @@
+import Carbon
+import Foundation
+import ScriptingBridge
+
+public enum MessageService: String, Sendable, CaseIterable {
+  case auto
+  case imessage
+  case sms
+}
+
+public struct MessageSendOptions: Sendable {
+  public var recipient: String
+  public var text: String
+  public var attachmentPath: String
+  public var service: MessageService
+  public var region: String
+
+  public init(
+    recipient: String,
+    text: String = "",
+    attachmentPath: String = "",
+    service: MessageService = .auto,
+    region: String = "US"
+  ) {
+    self.recipient = recipient
+    self.text = text
+    self.attachmentPath = attachmentPath
+    self.service = service
+    self.region = region
+  }
+}
+
+public struct MessageSender {
+  private let normalizer = PhoneNumberNormalizer()
+
+  public init() {}
+
+  public func send(_ options: MessageSendOptions) throws {
+    var resolved = options
+    if resolved.region.isEmpty { resolved.region = "US" }
+    resolved.recipient = normalizer.normalize(resolved.recipient, region: resolved.region)
+    if resolved.service == .auto { resolved.service = .imessage }
+
+    let script = appleScript()
+    let arguments = [
+      resolved.recipient,
+      resolved.text,
+      resolved.service.rawValue,
+      resolved.attachmentPath,
+      resolved.attachmentPath.isEmpty ? "0" : "1",
+    ]
+
+    try runAppleScript(source: script, arguments: arguments)
+  }
+
+  private func appleScript() -> String {
+    return """
+      on run argv
+          set theRecipient to item 1 of argv
+          set theMessage to item 2 of argv
+          set theService to item 3 of argv
+          set theFilePath to item 4 of argv
+          set useAttachment to item 5 of argv
+
+          tell application "Messages"
+              if theService is "sms" then
+                  set targetService to first service whose service type is SMS
+              else
+                  set targetService to first service whose service type is iMessage
+              end if
+
+              set targetBuddy to buddy theRecipient of targetService
+              if theMessage is not "" then
+                  send theMessage to targetBuddy
+              end if
+              if useAttachment is "1" then
+                  set theFile to POSIX file theFilePath as alias
+                  send theFile to targetBuddy
+              end if
+          end tell
+      end run
+      """
+  }
+
+  private func runAppleScript(source: String, arguments: [String]) throws {
+    guard let script = NSAppleScript(source: source) else {
+      throw IMsgError.appleScriptFailure("Unable to compile AppleScript")
+    }
+    var errorInfo: NSDictionary?
+    let event = NSAppleEventDescriptor(
+      eventClass: AEEventClass(kASAppleScriptSuite),
+      eventID: AEEventID(kASSubroutineEvent),
+      targetDescriptor: nil,
+      returnID: AEReturnID(kAutoGenerateReturnID),
+      transactionID: AETransactionID(kAnyTransactionID)
+    )
+    event.setParam(
+      NSAppleEventDescriptor(string: "run"), forKeyword: AEKeyword(keyASSubroutineName))
+    let list = NSAppleEventDescriptor.list()
+    for (index, value) in arguments.enumerated() {
+      list.insert(NSAppleEventDescriptor(string: value), at: index + 1)
+    }
+    event.setParam(list, forKeyword: keyDirectObject)
+    script.executeAppleEvent(event, error: &errorInfo)
+    if let errorInfo {
+      let message =
+        (errorInfo[NSAppleScript.errorMessage] as? String) ?? "Unknown AppleScript error"
+      throw IMsgError.appleScriptFailure(message)
+    }
+  }
+}

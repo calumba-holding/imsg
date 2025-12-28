@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.2.0 - 2025-12-28
+- feat: Swift 6 rewrite with reusable IMsgCore library target
+- feat: Commander-based CLI with SwiftPM build/test workflow
+- feat: event-driven watch using filesystem events (no polling)
+- feat: SQLite.swift + PhoneNumberKit + NSAppleScript integration
+- chore: SwiftLint + swift-format linting
+- change: JSON attachment keys now snake_case
+- deprecation note: `--interval` replaced by `--debounce` (no compatibility)
+
 ## 0.1.1 - 2025-12-27
 - feat: `imsg chats --json`
 - fix: drop sqlite `immutable` flag so new messages/replies show up (thanks @zleman1593)

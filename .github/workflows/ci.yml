@@ -10,20 +10,19 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          # Keep CI aligned with the Go toolchain defined in go.mod
-          go-version-file: go.mod
-      - name: Go fmt
-        run: |
-          diff=$(gofmt -l ./)
-          if [ -n "$diff" ]; then
-            echo "gofmt found issues:" && echo "$diff" && exit 1
-          fi
-      - name: Go test
-        run: go test ./...
-      - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
-      - name: golangci-lint
-        run: golangci-lint run --out-format=colored-line-number
+      - name: Swift version
+        run: swift --version
+      - name: Install SwiftLint
+        run: brew install swiftlint
+      - name: Resolve packages
+        run: swift package resolve
+      - name: Patch dependencies
+        run: scripts/patch-deps.sh
+      - name: Swift format lint
+        run: swift format lint --recursive Sources Tests
+      - name: SwiftLint
+        run: swiftlint
+      - name: Swift test
+        run: swift test
+      - name: Swift build
+        run: swift build -c release --product imsg

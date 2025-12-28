@@ -11,11 +11,11 @@
 2. Ensure CI is green on `main`
    - `pnpm lint`
    - `pnpm test`
-   - `gh run list --branch main --limit 1`
+   - `pnpm format` (optional, if formatting changes are expected)
 3. Tag and push
    - `git tag -a vX.Y.Z -m "vX.Y.Z"`
    - `git push origin vX.Y.Z`
 
 ## What happens in CI
-- `.github/workflows/release.yml` runs GoReleaser on tag push.
+- `.github/workflows/release.yml` builds a macOS release binary and uploads `imsg-macos.zip`.
 - After assets upload, the workflow updates the GitHub Release body using the `CHANGELOG.md` section for `X.Y.Z`.

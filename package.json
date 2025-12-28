@@ -1,13 +1,14 @@
 {
   "name": "imsg",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
-    "imsg": "go run ./cmd/imsg",
+    "deps:patch": "swift package resolve && scripts/patch-deps.sh",
+    "imsg": "pnpm -s deps:patch && swift run imsg",
     "start": "pnpm imsg",
-    "format": "gofmt -w cmd internal",
-    "lint": "golangci-lint run --out-format=colored-line-number",
-    "test": "go test ./...",
-    "build": "mkdir -p bin && go build -o bin/imsg ./cmd/imsg"
+    "format": "swift format --in-place --recursive Sources Tests",
+    "lint": "swift format lint --recursive Sources Tests && swiftlint",
+    "test": "pnpm -s deps:patch && swift test",
+    "build": "pnpm -s deps:patch && mkdir -p bin && swift build -c release --product imsg && cp .build/release/imsg bin/imsg"
   }
 }
