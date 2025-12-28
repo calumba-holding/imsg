@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.2.4 - 2025-12-28
+- fix: avoid Bundle.module lookup so symlinked installs can resolve version bundle
+
 ## 0.2.3 - 2025-12-28
 - fix: resolve version bundle when imsg is invoked via symlinked path
 

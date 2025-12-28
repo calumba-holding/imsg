@@ -101,23 +101,10 @@ struct CommandRouter {
     {
       return envVersion
     }
-    if let value = loadVersion(from: Bundle.module) {
-      return value
-    }
     if let value = loadVersionFromExecutableBundle() {
       return value
     }
     return "dev"
-  }
-
-  private static func loadVersion(from bundle: Bundle) -> String? {
-    guard let url = bundle.url(forResource: "version", withExtension: "txt"),
-      let value = try? String(contentsOf: url, encoding: .utf8)
-    else {
-      return nil
-    }
-    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
   }
 
   private static func loadVersionFromExecutableBundle() -> String? {
@@ -128,6 +115,12 @@ struct CommandRouter {
     guard let bundle = Bundle(url: bundleURL) else {
       return nil
     }
-    return loadVersion(from: bundle)
+    guard let url = bundle.url(forResource: "version", withExtension: "txt"),
+      let value = try? String(contentsOf: url, encoding: .utf8)
+    else {
+      return nil
+    }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 }
