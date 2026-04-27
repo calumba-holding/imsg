@@ -39,7 +39,6 @@ Package.resolved
 
 # Build artifacts
 bin/
-slides/
 
 # Node.js / pnpm
 pnpm-lock.yaml
