@@ -53,6 +53,7 @@ func reactCommandBuildsParameterizedAppleScriptForStandardTapback() async throws
   #expect(capturedScript.contains("keystroke \"f\" using command down"))
   #expect(capturedScript.contains("set targetChat to chat id chatGUID"))
   #expect(capturedScript.contains("keystroke reactionKey"))
+  #expect(capturedScript.contains("keystroke reactionKey\n      delay 0.1\n      key code 36"))
   #expect(capturedScript.contains("chat123") == false)
 }
 
