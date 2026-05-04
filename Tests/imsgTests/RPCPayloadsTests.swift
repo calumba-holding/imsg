@@ -121,6 +121,30 @@ func messagePayloadOmitsEmptyReplyToGuid() throws {
 }
 
 @Test
+func watchDebounceIntervalDefaultsToHalfSecond() throws {
+  #expect(try watchDebounceIntervalParam([:]) == 0.5)
+}
+
+@Test
+func watchDebounceIntervalAcceptsSnakeAndCamelCaseMilliseconds() throws {
+  #expect(try watchDebounceIntervalParam(["debounce_ms": 750]) == 0.75)
+  #expect(try watchDebounceIntervalParam(["debounceMs": "125"]) == 0.125)
+}
+
+@Test
+func watchDebounceIntervalRejectsInvalidValues() {
+  do {
+    _ = try watchDebounceIntervalParam(["debounce_ms": -1])
+    #expect(Bool(false))
+  } catch let error as RPCError {
+    #expect(error.code == -32602)
+    #expect(error.data?.contains("debounce_ms") == true)
+  } catch {
+    #expect(Bool(false))
+  }
+}
+
+@Test
 func paramParsingHelpers() {
   #expect(stringParam(123 as NSNumber) == "123")
   #expect(intParam("42") == 42)

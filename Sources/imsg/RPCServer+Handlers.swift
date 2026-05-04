@@ -70,12 +70,16 @@ extension RPCServer {
     let endISO = stringParam(params["end"])
     let includeAttachments = boolParam(params["attachments"]) ?? false
     let includeReactions = boolParam(params["include_reactions"]) ?? false
+    let debounceInterval = try watchDebounceIntervalParam(params)
     let filter = try MessageFilter.fromISO(
       participants: participants,
       startISO: startISO,
       endISO: endISO
     )
-    let config = MessageWatcherConfiguration(includeReactions: includeReactions)
+    let config = MessageWatcherConfiguration(
+      debounceInterval: debounceInterval,
+      includeReactions: includeReactions
+    )
     let subID = await subscriptions.allocateID()
     let localStore = store
     let localWatcher = watcher

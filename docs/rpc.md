@@ -38,10 +38,15 @@ Params:
 - `start` / `end` (ISO8601, optional)
 - `attachments` (bool, default false)
 - `include_reactions` (bool, default false)
+- `debounce_ms` / `debounceMs` (int milliseconds, default 500)
 Result:
 - `{ "subscription": 1 }`
 Notifications:
 - `{"jsonrpc":"2.0","method":"message","params":{"subscription":1,"message":<Message>}}`
+
+The RPC default debounce is intentionally higher than the CLI default so macOS
+has time to settle follow-up writes such as `is_from_me` updates on outbound
+messages. Clients that need lower latency can pass `debounce_ms`.
 
 ### `watch.unsubscribe`
 Params:

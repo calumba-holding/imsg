@@ -115,3 +115,14 @@ func stringArrayParam(_ value: Any?) -> [String] {
   }
   return []
 }
+
+let defaultRPCWatchDebounceInterval: TimeInterval = 0.5
+
+func watchDebounceIntervalParam(_ params: [String: Any]) throws -> TimeInterval {
+  let raw = params["debounce_ms"] ?? params["debounceMs"]
+  guard let raw else { return defaultRPCWatchDebounceInterval }
+  guard let milliseconds = intParam(raw), milliseconds >= 0 else {
+    throw RPCError.invalidParams("debounce_ms must be a non-negative integer")
+  }
+  return Double(milliseconds) / 1000
+}
