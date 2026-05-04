@@ -1,9 +1,11 @@
 # Groups
 
 ## What counts as a group
-- `chat.chat_identifier` or `chat.guid` with `;+;` or `;-;` in the handle.
-- Example: `iMessage;+;chat1234567890` (group handle).
-- Direct chats typically use a single handle (phone/email) without `;+;` or `;-;`.
+- `chat.chat_identifier` or `chat.guid` contains `;+;`, for example
+  `iMessage;+;chat1234567890`.
+- `SERVICE;-;TARGET` is a direct 1:1 chat, for example `iMessage;-;+15551234567`,
+  and is deliberately not flagged as a group.
+- Direct chats typically use a single handle (phone/email) with no `;+;`.
 
 ## Where the identifiers live
 - `chat.ROWID` -> `chat_id` (stable within one DB).
@@ -20,6 +22,7 @@
 - Attachments supported same as direct sends.
 
 ## Inbound metadata (JSON)
+The direct CLI (`imsg chats`, `imsg history`, `imsg watch`) and JSON-RPC surface include:
 - `chat_id`
 - `chat_identifier`
 - `chat_guid`
@@ -28,6 +31,17 @@
 - `is_group`
 
 `chat_id` is preferred for routing within one machine/DB.
+
+### Participants exclude the local user
+`participants` is sourced from Messages.app's `chat_handle_join` table, which
+stores external handles. The local user's handle is implicit and message-specific:
+use `is_from_me` plus `destination_caller_id` on sent messages when that distinction
+matters.
+
+## Focused group lookup
+- `imsg group --chat-id <rowid>` prints id, identifier, guid, name, service,
+  `is_group`, and participants for one chat. It works for direct chats too and
+  supports `--json`.
 
 ## Notes
 - Group send uses chat handle, not `buddy`.

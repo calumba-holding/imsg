@@ -7,13 +7,23 @@ struct ChatPayload: Codable {
   let identifier: String
   let service: String
   let lastMessageAt: String
+  let guid: String?
+  let displayName: String?
+  let isGroup: Bool
+  let participants: [String]?
 
-  init(chat: Chat) {
+  init(chat: Chat, chatInfo: ChatInfo? = nil, participants: [String]? = nil) {
+    let identifier = chatInfo?.identifier ?? chat.identifier
+    let guid = chatInfo?.guid ?? ""
     self.id = chat.id
     self.name = chat.name
-    self.identifier = chat.identifier
-    self.service = chat.service
+    self.identifier = identifier
+    self.service = chatInfo?.service ?? chat.service
     self.lastMessageAt = CLIISO8601.format(chat.lastMessageAt)
+    self.guid = guid.isEmpty ? nil : guid
+    self.displayName = chatInfo?.name
+    self.isGroup = isGroupHandle(identifier: identifier, guid: guid)
+    self.participants = participants
   }
 
   enum CodingKeys: String, CodingKey {
@@ -22,6 +32,10 @@ struct ChatPayload: Codable {
     case identifier
     case service
     case lastMessageAt = "last_message_at"
+    case guid
+    case displayName = "display_name"
+    case isGroup = "is_group"
+    case participants
   }
 }
 
@@ -136,6 +150,36 @@ struct ReactionPayload: Codable {
     case sender
     case isFromMe = "is_from_me"
     case createdAt = "created_at"
+  }
+}
+
+struct GroupPayload: Codable {
+  let id: Int64
+  let identifier: String
+  let guid: String
+  let name: String
+  let service: String
+  let isGroup: Bool
+  let participants: [String]
+
+  init(chatInfo: ChatInfo, participants: [String]) {
+    self.id = chatInfo.id
+    self.identifier = chatInfo.identifier
+    self.guid = chatInfo.guid
+    self.name = chatInfo.name
+    self.service = chatInfo.service
+    self.isGroup = isGroupHandle(identifier: chatInfo.identifier, guid: chatInfo.guid)
+    self.participants = participants
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case identifier
+    case guid
+    case name
+    case service
+    case isGroup = "is_group"
+    case participants
   }
 }
 

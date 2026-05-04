@@ -14,9 +14,33 @@ func chatsCommandRunsWithJsonOutput() async throws {
     flags: ["jsonOutput"]
   )
   let runtime = RuntimeOptions(parsedValues: values)
-  _ = try await StdoutCapture.capture {
+  let (output, _) = try await StdoutCapture.capture {
     try await ChatsCommand.spec.run(values, runtime)
   }
+  let payload = try jsonObject(from: output)
+  #expect(payload["is_group"] as? Bool == true)
+  #expect(payload["guid"] as? String == "iMessage;+;chat123")
+  #expect(payload["display_name"] as? String == "Test Chat")
+  #expect(payload["participants"] as? [String] == ["+123"])
+}
+
+@Test
+func chatsCommandJsonReportsDirectChatMetadata() async throws {
+  let path = try CommandTestDatabase.makePathDirectChat()
+  let values = ParsedValues(
+    positional: [],
+    options: ["db": [path], "limit": ["5"]],
+    flags: ["jsonOutput"]
+  )
+  let runtime = RuntimeOptions(parsedValues: values)
+  let (output, _) = try await StdoutCapture.capture {
+    try await ChatsCommand.spec.run(values, runtime)
+  }
+  let payload = try jsonObject(from: output)
+  #expect(payload["is_group"] as? Bool == false)
+  #expect(payload["guid"] as? String == "iMessage;-;+123")
+  #expect(payload["display_name"] as? String == "Direct Chat")
+  #expect(payload["participants"] as? [String] == ["+123"])
 }
 
 @Test

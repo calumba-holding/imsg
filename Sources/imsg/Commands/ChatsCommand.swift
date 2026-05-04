@@ -26,7 +26,10 @@ enum ChatsCommand {
 
     if runtime.jsonOutput {
       for chat in chats {
-        try StdoutWriter.writeJSONLine(ChatPayload(chat: chat))
+        let chatInfo = try store.chatInfo(chatID: chat.id)
+        let participants = try store.participants(chatID: chat.id)
+        try StdoutWriter.writeJSONLine(
+          ChatPayload(chat: chat, chatInfo: chatInfo, participants: participants))
       }
       return
     }

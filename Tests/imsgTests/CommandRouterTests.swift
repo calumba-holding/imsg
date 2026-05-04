@@ -32,3 +32,9 @@ func commandRouterUnknownCommand() async {
   }
   #expect(status == 1)
 }
+
+@Test
+func commandRouterIncludesGroupCommand() {
+  let router = CommandRouter()
+  #expect(router.specs.contains { $0.name == "group" })
+}

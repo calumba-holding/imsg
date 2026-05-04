@@ -35,6 +35,7 @@ make build
 
 ## Commands
 - `imsg chats [--limit 20] [--json]` — list recent conversations.
+- `imsg group --chat-id <id> [--json]` — show identity and participants for one chat.
 - `imsg history --chat-id <id> [--limit 50] [--attachments] [--participants +15551234567,...] [--start 2025-01-01T00:00:00Z] [--end 2025-02-01T00:00:00Z] [--json]`
 - `imsg watch [--chat-id <id>] [--since-rowid <n>] [--debounce 250ms] [--attachments] [--participants …] [--start …] [--end …] [--json]`
 - `imsg send --to <handle> [--text "hi"] [--file /path/img.jpg] [--service imessage|sms|auto] [--region US]`
@@ -50,6 +51,9 @@ imsg chats --limit 5
 
 # list chats as JSON
 imsg chats --limit 5 --json
+
+# show one chat's identity + participants
+imsg group --chat-id 1 --json
 
 # last 10 messages in chat 1 with attachments
 imsg history --chat-id 1 --limit 10 --attachments
@@ -80,7 +84,7 @@ imsg typing --to "+14155551212" --duration 5s
 `--attachments` prints per-attachment lines with name, MIME, missing flag, and resolved path (tilde expanded). Only metadata is shown; files aren’t copied.
 
 ## JSON output
-`imsg chats --json` emits one JSON object per chat with fields: `id`, `name`, `identifier`, `service`, `last_message_at`.
+`imsg chats --json` emits one JSON object per chat with fields: `id`, `name`, `identifier`, `service`, `last_message_at`, `guid`, `display_name`, `is_group`, `participants`.
 `imsg history --json` and `imsg watch --json` emit one JSON object per message with fields: `id`, `chat_id`, `chat_identifier`, `chat_guid`, `chat_name`, `participants`, `is_group`, `guid`, `reply_to_guid`, `destination_caller_id`, `sender`, `is_from_me`, `text`, `created_at`, `attachments` (array of metadata with `filename`, `transfer_name`, `uti`, `mime_type`, `total_bytes`, `is_sticker`, `original_path`, `missing`), `reactions`.
 
 Note: `reply_to_guid`, `destination_caller_id`, and `reactions` are read-only metadata.
