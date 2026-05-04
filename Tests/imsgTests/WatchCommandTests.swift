@@ -86,38 +86,9 @@ func watchCommandRunsWithJsonOutput() async throws {
     flags: ["jsonOutput"]
   )
   let runtime = RuntimeOptions(parsedValues: values)
-  let db = try Connection(.inMemory)
-  try db.execute(
-    """
-    CREATE TABLE attachment (
-      ROWID INTEGER PRIMARY KEY,
-      filename TEXT,
-      transfer_name TEXT,
-      uti TEXT,
-      mime_type TEXT,
-      total_bytes INTEGER,
-      is_sticker INTEGER
-    );
-    """
-  )
-  try db.execute(
-    "CREATE TABLE message_attachment_join (message_id INTEGER, attachment_id INTEGER);")
-  try db.run(
-    """
-    INSERT INTO attachment(ROWID, filename, transfer_name, uti, mime_type, total_bytes, is_sticker)
-    VALUES (1, '/tmp/file.dat', 'file.dat', 'public.data', 'application/octet-stream', 10, 0)
-    """
-  )
-  try db.run("INSERT INTO message_attachment_join(message_id, attachment_id) VALUES (1, 1)")
-
-  let store = try MessageStore(
-    connection: db,
-    path: ":memory:",
-    hasAttributedBody: false,
-    hasReactionColumns: false
-  )
+  let store = try CommandTestDatabase.makeStoreForRPC()
   let message = Message(
-    rowID: 1,
+    rowID: 5,
     chatID: 1,
     sender: "+123",
     text: "hello",
@@ -125,9 +96,9 @@ func watchCommandRunsWithJsonOutput() async throws {
     isFromMe: false,
     service: "iMessage",
     handleID: nil,
-    attachmentsCount: 1
+    attachmentsCount: 0
   )
-  _ = try await StdoutCapture.capture {
+  let (output, _) = try await StdoutCapture.capture {
     try await WatchCommand.run(
       values: values,
       runtime: runtime,
@@ -135,6 +106,9 @@ func watchCommandRunsWithJsonOutput() async throws {
       streamProvider: singleMessageStreamProvider(message)
     )
   }
+  let payload = try jsonObject(from: output)
+  #expect(payload["is_group"] as? Bool == true)
+  #expect(payload["chat_identifier"] as? String == "iMessage;+;chat123")
 }
 
 @Test
@@ -183,43 +157,9 @@ func watchCommandFlushesJsonOutput() async throws {
     flags: ["jsonOutput"]
   )
   let runtime = RuntimeOptions(parsedValues: values)
-  let db = try Connection(.inMemory)
-  try db.execute(
-    """
-    CREATE TABLE attachment (
-      ROWID INTEGER PRIMARY KEY,
-      filename TEXT,
-      transfer_name TEXT,
-      uti TEXT,
-      mime_type TEXT,
-      total_bytes INTEGER,
-      is_sticker INTEGER
-    );
-    """
-  )
-  try db.execute(
-    "CREATE TABLE message_attachment_join (message_id INTEGER, attachment_id INTEGER);")
-  try db.execute(
-    """
-    CREATE TABLE message (
-      ROWID INTEGER PRIMARY KEY,
-      handle_id INTEGER,
-      text TEXT,
-      date INTEGER,
-      is_from_me INTEGER,
-      service TEXT
-    );
-    """
-  )
-
-  let store = try MessageStore(
-    connection: db,
-    path: ":memory:",
-    hasAttributedBody: false,
-    hasReactionColumns: false
-  )
+  let store = try CommandTestDatabase.makeStoreForRPC()
   let message = Message(
-    rowID: 1,
+    rowID: 5,
     chatID: 1,
     sender: "+123",
     text: "hello",
@@ -239,4 +179,10 @@ func watchCommandFlushesJsonOutput() async throws {
     )
   }
   #expect(output.contains("\"text\":\"hello\""))
+}
+
+private func jsonObject(from output: String) throws -> [String: Any] {
+  let line = output.split(separator: "\n").first.map(String.init) ?? ""
+  let data = Data(line.utf8)
+  return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 }

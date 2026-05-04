@@ -28,9 +28,12 @@ func historyCommandRunsWithChatID() async throws {
     flags: ["jsonOutput"]
   )
   let runtime = RuntimeOptions(parsedValues: values)
-  _ = try await StdoutCapture.capture {
+  let (output, _) = try await StdoutCapture.capture {
     try await HistoryCommand.spec.run(values, runtime)
   }
+  let payload = try jsonObject(from: output)
+  #expect(payload["is_group"] as? Bool == true)
+  #expect(payload["chat_guid"] as? String == "iMessage;+;chat123")
 }
 
 @Test
@@ -119,4 +122,10 @@ func sendCommandResolvesChatID() async throws {
   #expect(captured?.chatIdentifier == "+123")
   #expect(captured?.chatGUID == "iMessage;+;chat123")
   #expect(captured?.recipient.isEmpty == true)
+}
+
+private func jsonObject(from output: String) throws -> [String: Any] {
+  let line = output.split(separator: "\n").first.map(String.init) ?? ""
+  let data = Data(line.utf8)
+  return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 }

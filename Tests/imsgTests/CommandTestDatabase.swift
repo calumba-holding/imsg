@@ -12,7 +12,7 @@ enum CommandTestDatabase {
   static func makePath() throws -> String {
     let path = try makeDatabasePath()
     let db = try Connection(path)
-    try createSchema(db, includeChatHandleJoin: false)
+    try createSchema(db, includeChatHandleJoin: true)
     try seedBasicChat(db)
     return path
   }

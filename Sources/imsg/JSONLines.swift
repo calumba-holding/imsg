@@ -18,4 +18,10 @@ enum JSONLines {
       StdoutWriter.writeLine(line)
     }
   }
+
+  static func printObject(_ value: Any) throws {
+    let data = try JSONSerialization.data(withJSONObject: value, options: [])
+    guard let line = String(data: data, encoding: .utf8), !line.isEmpty else { return }
+    StdoutWriter.writeLine(line)
+  }
 }

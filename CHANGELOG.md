@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- fix: include group metadata in CLI JSON history/watch output (#57, thanks @clawbunny)
 - docs: document Homebrew install path in the README (#61, thanks @joshuayoes)
 - fix: decode UTF-16LE BOM attributed message bodies in plain-text history output (#91, thanks @clawbunny)
 - fix: confirm standard tapback reaction selection in Messages automation (#53, thanks @PeterRosdahl)

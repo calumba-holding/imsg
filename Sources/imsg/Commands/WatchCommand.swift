@@ -76,6 +76,7 @@ enum WatchCommand {
 
     let store = try storeFactory(dbPath)
     let watcher = MessageWatcher(store: store)
+    let cache = ChatCache(store: store)
     let config = MessageWatcherConfiguration(
       debounceInterval: debounceInterval,
       batchLimit: 100,
@@ -88,14 +89,14 @@ enum WatchCommand {
         continue
       }
       if runtime.jsonOutput {
-        let attachments = try store.attachments(for: message.rowID)
-        let reactions = try store.reactions(for: message.rowID)
-        let payload = MessagePayload(
+        let payload = try await buildMessagePayload(
+          store: store,
+          cache: cache,
           message: message,
-          attachments: attachments,
-          reactions: reactions
+          includeAttachments: true,
+          includeReactions: true
         )
-        try StdoutWriter.writeJSONLine(payload)
+        try JSONLines.printObject(payload)
         continue
       }
       let direction = message.isFromMe ? "sent" : "recv"
