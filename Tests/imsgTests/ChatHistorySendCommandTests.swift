@@ -33,7 +33,30 @@ func historyCommandRunsWithChatID() async throws {
   }
   let payload = try jsonObject(from: output)
   #expect(payload["is_group"] as? Bool == true)
+  #expect(payload["chat_identifier"] as? String == "+123")
   #expect(payload["chat_guid"] as? String == "iMessage;+;chat123")
+  #expect(payload["chat_name"] as? String == "Test Chat")
+  #expect(payload["participants"] as? [String] == ["+123"])
+}
+
+@Test
+func historyCommandJsonReportsDirectChatMetadata() async throws {
+  let path = try CommandTestDatabase.makePathDirectChat()
+  let values = ParsedValues(
+    positional: [],
+    options: ["db": [path], "chatID": ["1"], "limit": ["5"]],
+    flags: ["jsonOutput"]
+  )
+  let runtime = RuntimeOptions(parsedValues: values)
+  let (output, _) = try await StdoutCapture.capture {
+    try await HistoryCommand.spec.run(values, runtime)
+  }
+  let payload = try jsonObject(from: output)
+  #expect(payload["is_group"] as? Bool == false)
+  #expect(payload["chat_identifier"] as? String == "+123")
+  #expect(payload["chat_guid"] as? String == "iMessage;-;+123")
+  #expect(payload["chat_name"] as? String == "Direct Chat")
+  #expect(payload["participants"] as? [String] == ["+123"])
 }
 
 @Test

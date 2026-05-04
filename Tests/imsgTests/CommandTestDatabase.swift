@@ -17,6 +17,19 @@ enum CommandTestDatabase {
     return path
   }
 
+  static func makePathDirectChat() throws -> String {
+    let path = try makePath()
+    let db = try Connection(path)
+    try db.run(
+      """
+      UPDATE chat
+      SET chat_identifier = '+123', guid = 'iMessage;-;+123', display_name = 'Direct Chat'
+      WHERE ROWID = 1
+      """
+    )
+    return path
+  }
+
   static func makePathWithAttachment() throws -> String {
     let path = try makePath()
     let db = try Connection(path)
@@ -34,6 +47,25 @@ enum CommandTestDatabase {
     let db = try Connection(.inMemory)
     try createSchema(db, includeChatHandleJoin: true)
     try seedRPCChat(db)
+    return try MessageStore(
+      connection: db,
+      path: ":memory:",
+      hasAttributedBody: false,
+      hasReactionColumns: false
+    )
+  }
+
+  static func makeStoreForRPCDirectChat() throws -> MessageStore {
+    let db = try Connection(.inMemory)
+    try createSchema(db, includeChatHandleJoin: true)
+    try seedRPCChat(db)
+    try db.run(
+      """
+      UPDATE chat
+      SET chat_identifier = '+123', guid = 'iMessage;-;+123', display_name = 'Direct Chat'
+      WHERE ROWID = 1
+      """
+    )
     return try MessageStore(
       connection: db,
       path: ":memory:",
@@ -135,6 +167,7 @@ enum CommandTestDatabase {
       """
     )
     try db.run("INSERT INTO handle(ROWID, id) VALUES (1, '+123')")
+    try db.run("INSERT INTO chat_handle_join(chat_id, handle_id) VALUES (1, 1)")
     try db.run(
       """
       INSERT INTO message(ROWID, handle_id, text, date, is_from_me, service)

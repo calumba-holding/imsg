@@ -109,6 +109,45 @@ func watchCommandRunsWithJsonOutput() async throws {
   let payload = try jsonObject(from: output)
   #expect(payload["is_group"] as? Bool == true)
   #expect(payload["chat_identifier"] as? String == "iMessage;+;chat123")
+  #expect(payload["chat_guid"] as? String == "iMessage;+;chat123")
+  #expect(payload["chat_name"] as? String == "Group Chat")
+  #expect(payload["participants"] as? [String] == ["+123", "me@icloud.com"])
+}
+
+@Test
+func watchCommandJsonReportsDirectChatMetadata() async throws {
+  let values = ParsedValues(
+    positional: [],
+    options: ["db": ["/tmp/unused"], "debounce": ["1ms"]],
+    flags: ["jsonOutput"]
+  )
+  let runtime = RuntimeOptions(parsedValues: values)
+  let store = try CommandTestDatabase.makeStoreForRPCDirectChat()
+  let message = Message(
+    rowID: 5,
+    chatID: 1,
+    sender: "+123",
+    text: "hello",
+    date: Date(),
+    isFromMe: false,
+    service: "iMessage",
+    handleID: nil,
+    attachmentsCount: 0
+  )
+  let (output, _) = try await StdoutCapture.capture {
+    try await WatchCommand.run(
+      values: values,
+      runtime: runtime,
+      storeFactory: { _ in store },
+      streamProvider: singleMessageStreamProvider(message)
+    )
+  }
+  let payload = try jsonObject(from: output)
+  #expect(payload["is_group"] as? Bool == false)
+  #expect(payload["chat_identifier"] as? String == "+123")
+  #expect(payload["chat_guid"] as? String == "iMessage;-;+123")
+  #expect(payload["chat_name"] as? String == "Direct Chat")
+  #expect(payload["participants"] as? [String] == ["+123", "me@icloud.com"])
 }
 
 @Test
