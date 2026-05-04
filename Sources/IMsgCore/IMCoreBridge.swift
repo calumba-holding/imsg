@@ -23,8 +23,9 @@ public enum IMCoreBridgeError: Error, CustomStringConvertible {
 /// Bridge to IMCore via DYLD injection into Messages.app.
 ///
 /// Communicates with an injected dylib inside Messages.app via file-based IPC.
-/// The dylib has full access to IMCore because it runs within the Messages.app
-/// context with proper entitlements.
+/// The dylib has access to IMCore when Messages.app accepts the injection.
+/// macOS 26/Tahoe can still block this path with library validation/private
+/// entitlement checks.
 ///
 /// Requires:
 /// - SIP disabled (for `DYLD_INSERT_LIBRARIES` on system apps)
@@ -139,6 +140,10 @@ public final class IMCoreBridge: @unchecked Sendable {
       """
       SIP is disabled and the helper dylib is present, but Messages.app is not currently injected.
       Run `imsg launch` to enable advanced IMCore features.
+
+      Note: macOS 26/Tahoe can still block advanced IMCore features through
+      library validation or imagent private entitlement checks. Basic send,
+      history, and watch commands do not use this path.
       """
     )
   }

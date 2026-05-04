@@ -23,6 +23,7 @@
 - fix: dedupe URL balloon preview duplicates in watch stream without cross-chat/schema regressions (#64, thanks @lesaai)
 - fix: normalize IMCore typing chat lookup across `iMessage`, `SMS`, and `any` prefixes (#51, #54, #56, #58)
 - docs: document macOS 26 advanced IMCore injection limits (#60)
+- fix: report macOS 26/Tahoe IMCore typing entitlement failures as advanced-feature setup errors (#60)
 - docs: add a local release helper for dispatching Homebrew tap updates (#97, thanks @dinakars777)
 - feat: resolve contact names in chat/message output and direct sends (#75, #77, thanks @regaw-leinad and @jsindy)
 

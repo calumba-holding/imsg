@@ -78,3 +78,16 @@ func typingLookupCandidatesAvoidDoublePrefixingDirectIdentifiers() {
 func typingLookupCandidatesRejectBlankIdentifier() {
   #expect(TypingIndicator.chatLookupCandidates(for: "   ").isEmpty)
 }
+
+@Test
+func typingDaemonUnavailableMessageExplainsTahoeEntitlementBlock() {
+  let message = TypingIndicator.daemonUnavailableMessage()
+
+  #expect(message.contains("imagent"))
+  #expect(message.contains("macOS 26/Tahoe"))
+  #expect(message.contains("Apple-private entitlements"))
+  #expect(message.contains("imsg status"))
+  #expect(message.contains("send"))
+  #expect(message.contains("history"))
+  #expect(message.contains("watch"))
+}

@@ -144,6 +144,9 @@ Important:
 - macOS 26 can also block Messages.app dylib injection with library validation.
   In that case `imsg status` reports advanced features unavailable even with SIP
   disabled; normal send/history/watch commands still work.
+- On macOS 26/Tahoe, direct IMCore access can also fail because `imagent`
+  rejects clients without Apple-private entitlements. That only affects advanced
+  IMCore features such as `typing`.
 
 Setup:
 1) Disable SIP from Recovery mode: `csrutil disable`

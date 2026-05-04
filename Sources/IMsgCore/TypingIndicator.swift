@@ -134,6 +134,7 @@ public struct TypingIndicator: Sendable {
     if hasLiveDaemonConnection(controller) {
       daemonConnectionTracker.lock.lock()
       daemonConnectionTracker.hasAttemptedConnection = true
+      daemonConnectionTracker.connectionKnownUnavailable = false
       daemonConnectionTracker.lock.unlock()
       return
     }
@@ -154,6 +155,9 @@ public struct TypingIndicator: Sendable {
     let maxAttempts = 50
     for _ in 0..<maxAttempts {
       if hasLiveDaemonConnection(controller) {
+        daemonConnectionTracker.lock.lock()
+        daemonConnectionTracker.connectionKnownUnavailable = false
+        daemonConnectionTracker.lock.unlock()
         return
       }
       Thread.sleep(forTimeInterval: 0.1)
@@ -161,11 +165,11 @@ public struct TypingIndicator: Sendable {
     }
 
     if !hasLiveDaemonConnection(controller) {
+      daemonConnectionTracker.lock.lock()
+      daemonConnectionTracker.connectionKnownUnavailable = true
+      daemonConnectionTracker.lock.unlock()
       throw IMsgError.typingIndicatorFailed(
-        "Failed to connect to imagent (iMessage daemon). "
-          + "This requires either SIP disabled with 'imsg launch', "
-          + "or system modifications (AMFI disabled + XPC plist). "
-          + "Run 'imsg status' for setup instructions."
+        daemonUnavailableMessage()
       )
     }
   }
@@ -221,9 +225,25 @@ public struct TypingIndicator: Sendable {
       }
     }
 
+    daemonConnectionTracker.lock.lock()
+    let connectionKnownUnavailable = daemonConnectionTracker.connectionKnownUnavailable
+    daemonConnectionTracker.lock.unlock()
+    if connectionKnownUnavailable {
+      throw IMsgError.typingIndicatorFailed(daemonUnavailableMessage())
+    }
+
     throw IMsgError.typingIndicatorFailed(
       "Chat not found for identifier: \(identifier). "
         + "Make sure Messages.app has an active conversation with this contact.")
+  }
+
+  static func daemonUnavailableMessage() -> String {
+    "Failed to connect to imagent (Messages daemon) for IMCore typing indicators. "
+      + "On macOS 26/Tahoe, imagent can reject third-party clients without "
+      + "Apple-private entitlements, and Messages.app may also block the injected "
+      + "bridge via library validation. Run 'imsg status' and 'imsg launch' to "
+      + "verify advanced feature setup. Normal 'send', 'history', and 'watch' "
+      + "commands do not use this IMCore path."
   }
 
   static func chatLookupCandidates(for identifier: String) -> [String] {
@@ -272,6 +292,7 @@ public struct TypingIndicator: Sendable {
 private final class DaemonConnectionTracker: @unchecked Sendable {
   let lock = NSLock()
   var hasAttemptedConnection = false
+  var connectionKnownUnavailable = false
 }
 
 /// Thread-safe box for passing an error out of a Task back to the calling thread.

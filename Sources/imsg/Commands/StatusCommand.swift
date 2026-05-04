@@ -81,6 +81,14 @@ enum StatusCommand {
         StdoutWriter.writeLine("     make build-dylib")
         StdoutWriter.writeLine("     imsg launch")
         StdoutWriter.writeLine("")
+        StdoutWriter.writeLine("macOS 26/Tahoe note:")
+        StdoutWriter.writeLine(
+          "  Advanced IMCore features may still be blocked by library validation"
+        )
+        StdoutWriter.writeLine(
+          "  or imagent private entitlement checks. Basic commands still work."
+        )
+        StdoutWriter.writeLine("")
         StdoutWriter.writeLine("Note: Basic messaging features work without these steps.")
       }
     }
