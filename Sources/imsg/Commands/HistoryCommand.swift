@@ -21,7 +21,11 @@ enum HistoryCommand {
         flags: [
           .make(
             label: "attachments", names: [.long("attachments")], help: "include attachment metadata"
-          )
+          ),
+          .make(
+            label: "convertAttachments", names: [.long("convert-attachments")],
+            help: "convert CAF/GIF attachments to model-compatible cached files"
+          ),
         ]
       )
     ),
@@ -46,6 +50,8 @@ enum HistoryCommand {
     let dbPath = values.option("db") ?? MessageStore.defaultPath
     let limit = values.optionInt("limit") ?? 50
     let showAttachments = values.flag("attachments")
+    let attachmentOptions = AttachmentQueryOptions(
+      convertUnsupported: values.flag("convertAttachments"))
     let participants = values.optionValues("participants")
       .flatMap { $0.split(separator: ",").map { String($0) } }
       .filter { !$0.isEmpty }
@@ -61,7 +67,10 @@ enum HistoryCommand {
 
     if runtime.jsonOutput {
       let cache = ChatCache(store: store)
-      let attachmentsByMessageID = try store.attachments(for: filtered.map(\.rowID))
+      let attachmentsByMessageID = try store.attachments(
+        for: filtered.map(\.rowID),
+        options: attachmentOptions
+      )
       let reactionsByMessageID = try store.reactions(for: filtered)
       for message in filtered {
         let payload = try await buildMessagePayload(
@@ -72,6 +81,7 @@ enum HistoryCommand {
           includeReactions: true,
           prefetchedAttachments: attachmentsByMessageID[message.rowID] ?? [],
           prefetchedReactions: reactionsByMessageID[message.rowID] ?? [],
+          attachmentOptions: attachmentOptions,
           contactResolver: contacts
         )
         try JSONLines.printObject(payload)
@@ -88,12 +98,9 @@ enum HistoryCommand {
       StdoutWriter.writeLine("\(timestamp) [\(direction)] \(sender): \(message.text)")
       if message.attachmentsCount > 0 {
         if showAttachments {
-          let metas = try store.attachments(for: message.rowID)
+          let metas = try store.attachments(for: message.rowID, options: attachmentOptions)
           for meta in metas {
-            let name = displayName(for: meta)
-            StdoutWriter.writeLine(
-              "  attachment: name=\(name) mime=\(meta.mimeType) missing=\(meta.missing) path=\(meta.originalPath)"
-            )
+            StdoutWriter.writeLine(attachmentMetadataLine(for: meta))
           }
         } else {
           StdoutWriter.writeLine(

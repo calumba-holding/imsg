@@ -56,7 +56,7 @@ func messagePayload(
 }
 
 func attachmentPayload(_ meta: AttachmentMeta) -> [String: Any] {
-  return [
+  var payload: [String: Any] = [
     "filename": meta.filename,
     "transfer_name": meta.transferName,
     "uti": meta.uti,
@@ -66,6 +66,13 @@ func attachmentPayload(_ meta: AttachmentMeta) -> [String: Any] {
     "original_path": meta.originalPath,
     "missing": meta.missing,
   ]
+  if let convertedPath = meta.convertedPath {
+    payload["converted_path"] = convertedPath
+  }
+  if let convertedMimeType = meta.convertedMimeType {
+    payload["converted_mime_type"] = convertedMimeType
+  }
+  return payload
 }
 
 func reactionPayload(_ reaction: Reaction, senderName: String? = nil) -> [String: Any] {

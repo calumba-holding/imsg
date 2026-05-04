@@ -76,6 +76,8 @@ func messagePayloadIncludesChatFields() throws {
     totalBytes: 12,
     isSticker: false,
     originalPath: "/tmp/file.dat",
+    convertedPath: "/tmp/file.png",
+    convertedMimeType: "image/png",
     missing: false
   )
   let reaction = Reaction(
@@ -102,6 +104,9 @@ func messagePayloadIncludesChatFields() throws {
   #expect(payload["chat_name"] as? String == "Group")
   #expect(payload["is_group"] as? Bool == true)
   #expect((payload["attachments"] as? [[String: Any]])?.count == 1)
+  let attachmentPayload = (payload["attachments"] as? [[String: Any]])?.first
+  #expect(attachmentPayload?["converted_path"] as? String == "/tmp/file.png")
+  #expect(attachmentPayload?["converted_mime_type"] as? String == "image/png")
   #expect(
     (payload["reactions"] as? [[String: Any]])?.first?["emoji"] as? String
       == ReactionType.like.emoji)

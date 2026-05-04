@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- feat: optionally expose model-compatible converted attachment files for CAF/GIF metadata (#73, thanks @mfzeidan)
 - feat: add `imsg group` chat metadata lookup and group fields to `chats --json` (#88, thanks @mryanb)
 - fix: return best-effort message `id` and `guid` from RPC `send` responses (#85)
 - fix: keep watch streams alive with a periodic poll fallback when filesystem events are missed (#78)

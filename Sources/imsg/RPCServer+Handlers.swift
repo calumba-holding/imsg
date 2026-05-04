@@ -43,6 +43,8 @@ extension RPCServer {
     let startISO = stringParam(params["start"])
     let endISO = stringParam(params["end"])
     let includeAttachments = boolParam(params["attachments"]) ?? false
+    let attachmentOptions = AttachmentQueryOptions(
+      convertUnsupported: boolParam(params["convert_attachments"]) ?? false)
     let filter = try MessageFilter.fromISO(
       participants: participants,
       startISO: startISO,
@@ -59,6 +61,7 @@ extension RPCServer {
         message: message,
         includeAttachments: includeAttachments,
         includeReactions: true,
+        attachmentOptions: attachmentOptions,
         contactResolver: contactResolver
       )
       payloads.append(payload)
@@ -74,6 +77,8 @@ extension RPCServer {
     let startISO = stringParam(params["start"])
     let endISO = stringParam(params["end"])
     let includeAttachments = boolParam(params["attachments"]) ?? false
+    let attachmentOptions = AttachmentQueryOptions(
+      convertUnsupported: boolParam(params["convert_attachments"]) ?? false)
     let includeReactions = boolParam(params["include_reactions"]) ?? false
     let debounceInterval = try watchDebounceIntervalParam(params)
     let filter = try MessageFilter.fromISO(
@@ -95,6 +100,7 @@ extension RPCServer {
     let localSinceRowID = sinceRowID
     let localConfig = config
     let localIncludeAttachments = includeAttachments
+    let localAttachmentOptions = attachmentOptions
     let localIncludeReactions = includeReactions
     let localContactResolver = contactResolver
     let task = Task {
@@ -112,6 +118,7 @@ extension RPCServer {
             message: message,
             includeAttachments: localIncludeAttachments,
             includeReactions: localIncludeReactions,
+            attachmentOptions: localAttachmentOptions,
             contactResolver: localContactResolver
           )
           localWriter.sendNotification(
@@ -236,13 +243,15 @@ func buildMessagePayload(
   includeReactions: Bool,
   prefetchedAttachments: [AttachmentMeta]? = nil,
   prefetchedReactions: [Reaction]? = nil,
+  attachmentOptions: AttachmentQueryOptions = .default,
   contactResolver: any ContactResolving = NoOpContactResolver()
 ) async throws -> [String: Any] {
   let chatInfo = try await cache.info(chatID: message.chatID)
   let participants = try await cache.participants(chatID: message.chatID)
   let attachments: [AttachmentMeta]
   if includeAttachments {
-    attachments = try prefetchedAttachments ?? store.attachments(for: message.rowID)
+    attachments =
+      try prefetchedAttachments ?? store.attachments(for: message.rowID, options: attachmentOptions)
   } else {
     attachments = []
   }

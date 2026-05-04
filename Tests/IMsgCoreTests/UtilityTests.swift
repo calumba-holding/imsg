@@ -30,6 +30,60 @@ func attachmentResolverDisplayNamePrefersTransfer() {
 }
 
 @Test
+func attachmentResolverReportsCachedConvertedCAF() throws {
+  let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  let source = dir.appendingPathComponent("voice.caf")
+  try Data("caf".utf8).write(to: source)
+  let converted = AttachmentResolver.convertedURL(for: source.path, targetExtension: "m4a")
+  try FileManager.default.createDirectory(
+    at: converted.deletingLastPathComponent(),
+    withIntermediateDirectories: true
+  )
+  try Data("m4a".utf8).write(to: converted)
+  defer { try? FileManager.default.removeItem(at: converted) }
+
+  let meta = AttachmentResolver.metadata(
+    filename: source.path,
+    transferName: "voice.caf",
+    uti: "com.apple.coreaudio-format",
+    mimeType: "audio/x-caf",
+    totalBytes: 3,
+    isSticker: false,
+    options: AttachmentQueryOptions(convertUnsupported: true)
+  )
+
+  #expect(meta.originalPath == source.path)
+  #expect(meta.convertedPath == converted.path)
+  #expect(meta.convertedMimeType == "audio/mp4")
+  #expect(meta.mimeType == "audio/x-caf")
+}
+
+@Test
+func attachmentResolverLeavesUnsupportedFilesUnconverted() throws {
+  let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  let source = dir.appendingPathComponent("file.txt")
+  try Data("text".utf8).write(to: source)
+  let meta = AttachmentResolver.metadata(
+    filename: source.path,
+    transferName: "file.txt",
+    uti: "public.plain-text",
+    mimeType: "text/plain",
+    totalBytes: 4,
+    isSticker: false,
+    options: AttachmentQueryOptions(convertUnsupported: true)
+  )
+
+  #expect(meta.convertedPath == nil)
+  #expect(meta.convertedMimeType == nil)
+}
+
+@Test
 func iso8601ParserParsesFormats() {
   let fractional = "2024-01-02T03:04:05.678Z"
   let standard = "2024-01-02T03:04:05Z"

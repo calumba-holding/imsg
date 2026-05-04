@@ -39,8 +39,8 @@ make build
 ## Commands
 - `imsg chats [--limit 20] [--json]` — list recent conversations.
 - `imsg group --chat-id <id> [--json]` — show identity and participants for one chat.
-- `imsg history --chat-id <id> [--limit 50] [--attachments] [--participants +15551234567,...] [--start 2025-01-01T00:00:00Z] [--end 2025-02-01T00:00:00Z] [--json]`
-- `imsg watch [--chat-id <id>] [--since-rowid <n>] [--debounce 250ms] [--attachments] [--reactions] [--participants …] [--start …] [--end …] [--json]`
+- `imsg history --chat-id <id> [--limit 50] [--attachments] [--convert-attachments] [--participants +15551234567,...] [--start 2025-01-01T00:00:00Z] [--end 2025-02-01T00:00:00Z] [--json]`
+- `imsg watch [--chat-id <id>] [--since-rowid <n>] [--debounce 250ms] [--attachments] [--convert-attachments] [--reactions] [--participants …] [--start …] [--end …] [--json]`
 - `imsg send --to <handle-or-contact-name> [--text "hi"] [--file /path/file] [--service imessage|sms|auto] [--region US]`
 - `imsg react --chat-id <id> --reaction love|like|dislike|laugh|emphasis|question`
 - `imsg read --to <handle> [--chat-id <id> | --chat-identifier <id> | --chat-guid <guid>]`
@@ -91,7 +91,13 @@ imsg typing --to "+14155551212" --duration 5s
 ```
 
 ## Attachment notes
-`--attachments` prints per-attachment lines with name, MIME, missing flag, and resolved path (tilde expanded). Only metadata is shown; files aren’t copied.
+`--attachments` prints per-attachment lines with name, MIME, missing flag, and resolved path (tilde expanded). By default only metadata is shown; files aren’t copied.
+
+`--convert-attachments` uses `ffmpeg`, when available on `PATH`, to cache
+model-compatible copies for unsupported receive-side attachments: CAF audio is
+converted to M4A and GIF images to first-frame PNGs. The original attachment
+path remains unchanged; converted output is reported separately as
+`converted_path` / `converted_mime_type`.
 
 `imsg send --file` can send regular file attachments, including audio files such as
 `.m4a`, through Messages.app AppleScript. Before handing the file to Messages,
@@ -111,7 +117,7 @@ send/read/typing/reaction commands that control Messages.app.
 
 ## JSON output
 `imsg chats --json` emits one JSON object per chat with fields: `id`, `name`, `identifier`, `service`, `last_message_at`, `guid`, `display_name`, `contact_name`, `is_group`, `participants`.
-`imsg history --json` and `imsg watch --json` emit one JSON object per message with fields: `id`, `chat_id`, `chat_identifier`, `chat_guid`, `chat_name`, `participants`, `is_group`, `guid`, `reply_to_guid`, `destination_caller_id`, `sender`, `sender_name`, `is_from_me`, `text`, `created_at`, `attachments` (array of metadata with `filename`, `transfer_name`, `uti`, `mime_type`, `total_bytes`, `is_sticker`, `original_path`, `missing`), `reactions`.
+`imsg history --json` and `imsg watch --json` emit one JSON object per message with fields: `id`, `chat_id`, `chat_identifier`, `chat_guid`, `chat_name`, `participants`, `is_group`, `guid`, `reply_to_guid`, `destination_caller_id`, `sender`, `sender_name`, `is_from_me`, `text`, `created_at`, `attachments` (array of metadata with `filename`, `transfer_name`, `uti`, `mime_type`, `total_bytes`, `is_sticker`, `original_path`, `converted_path`, `converted_mime_type`, `missing`), `reactions`.
 When `watch --reactions --json` sees a tapback event, the message object also includes `is_reaction`, `reaction_type`, `reaction_emoji`, `is_reaction_add`, and `reacted_to_guid`.
 
 Note: `reply_to_guid`, `destination_caller_id`, and `reactions` are read-only metadata.

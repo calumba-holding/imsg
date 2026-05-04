@@ -210,6 +210,8 @@ struct AttachmentPayload: Codable {
   let totalBytes: Int64
   let isSticker: Bool
   let originalPath: String
+  let convertedPath: String?
+  let convertedMimeType: String?
   let missing: Bool
 
   init(meta: AttachmentMeta) {
@@ -220,6 +222,8 @@ struct AttachmentPayload: Codable {
     self.totalBytes = meta.totalBytes
     self.isSticker = meta.isSticker
     self.originalPath = meta.originalPath
+    self.convertedPath = meta.convertedPath
+    self.convertedMimeType = meta.convertedMimeType
     self.missing = meta.missing
   }
 
@@ -231,6 +235,8 @@ struct AttachmentPayload: Codable {
     case totalBytes = "total_bytes"
     case isSticker = "is_sticker"
     case originalPath = "original_path"
+    case convertedPath = "converted_path"
+    case convertedMimeType = "converted_mime_type"
     case missing = "missing"
   }
 }

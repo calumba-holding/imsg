@@ -84,6 +84,42 @@ func rpcMessagesHistoryIncludesChatFields() async throws {
 }
 
 @Test
+func rpcMessagesHistoryReportsConvertedAttachmentsWhenRequested() async throws {
+  let source = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathExtension("caf")
+  try Data("caf".utf8).write(to: source)
+  defer { try? FileManager.default.removeItem(at: source) }
+  let converted = AttachmentResolver.convertedURL(for: source.path, targetExtension: "m4a")
+  try FileManager.default.createDirectory(
+    at: converted.deletingLastPathComponent(),
+    withIntermediateDirectories: true
+  )
+  try Data("m4a".utf8).write(to: converted)
+  defer { try? FileManager.default.removeItem(at: converted) }
+
+  let store = try CommandTestDatabase.makeStoreForRPCWithAttachment(
+    filename: source.path,
+    transferName: "voice.caf",
+    uti: "com.apple.coreaudio-format",
+    mimeType: "audio/x-caf"
+  )
+  let output = TestRPCOutput()
+  let server = RPCServer(store: store, verbose: false, output: output)
+
+  let line =
+    #"{"jsonrpc":"2.0","id":2,"method":"messages.history","params":{"chat_id":1,"attachments":true,"convert_attachments":true}}"#
+  await server.handleLineForTesting(line)
+
+  let result = output.responses.first?["result"] as? [String: Any]
+  let messages = result?["messages"] as? [[String: Any]] ?? []
+  let attachments = messages.first?["attachments"] as? [[String: Any]]
+  #expect(attachments?.first?["original_path"] as? String == source.path)
+  #expect(attachments?.first?["converted_path"] as? String == converted.path)
+  #expect(attachments?.first?["converted_mime_type"] as? String == "audio/mp4")
+}
+
+@Test
 func rpcSendResolvesChatID() async throws {
   let store = try CommandTestDatabase.makeStoreForRPC()
   let output = TestRPCOutput()

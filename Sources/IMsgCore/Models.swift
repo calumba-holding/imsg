@@ -365,6 +365,8 @@ public struct AttachmentMeta: Sendable, Equatable {
   public let totalBytes: Int64
   public let isSticker: Bool
   public let originalPath: String
+  public let convertedPath: String?
+  public let convertedMimeType: String?
   public let missing: Bool
 
   public init(
@@ -375,6 +377,8 @@ public struct AttachmentMeta: Sendable, Equatable {
     totalBytes: Int64,
     isSticker: Bool,
     originalPath: String,
+    convertedPath: String? = nil,
+    convertedMimeType: String? = nil,
     missing: Bool
   ) {
     self.filename = filename
@@ -384,6 +388,18 @@ public struct AttachmentMeta: Sendable, Equatable {
     self.totalBytes = totalBytes
     self.isSticker = isSticker
     self.originalPath = originalPath
+    self.convertedPath = convertedPath
+    self.convertedMimeType = convertedMimeType
     self.missing = missing
+  }
+}
+
+public struct AttachmentQueryOptions: Sendable, Equatable {
+  public static let `default` = AttachmentQueryOptions()
+
+  public let convertUnsupported: Bool
+
+  public init(convertUnsupported: Bool = false) {
+    self.convertUnsupported = convertUnsupported
   }
 }

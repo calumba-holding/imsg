@@ -5,7 +5,10 @@ extension MessageStore {
   private static let bulkAttachmentBatchSize = 500
   private static let bulkReactionBatchSize = 200
 
-  public func attachments(for messageIDs: [Int64]) throws -> [Int64: [AttachmentMeta]] {
+  public func attachments(
+    for messageIDs: [Int64],
+    options: AttachmentQueryOptions = .default
+  ) throws -> [Int64: [AttachmentMeta]] {
     let uniqueIDs = Array(Set(messageIDs)).sorted()
     guard !uniqueIDs.isEmpty else { return [:] }
 
@@ -31,17 +34,15 @@ extension MessageStore {
           let mimeType = stringValue(row[4])
           let totalBytes = int64Value(row[5]) ?? 0
           let isSticker = boolValue(row[6])
-          let resolved = AttachmentResolver.resolve(filename)
           metasByMessageID[messageID, default: []].append(
-            AttachmentMeta(
+            AttachmentResolver.metadata(
               filename: filename,
               transferName: transferName,
               uti: uti,
               mimeType: mimeType,
               totalBytes: totalBytes,
               isSticker: isSticker,
-              originalPath: resolved.resolved,
-              missing: resolved.missing
+              options: options
             ))
         }
       }

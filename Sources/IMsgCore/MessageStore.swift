@@ -262,7 +262,10 @@ public final class MessageStore: @unchecked Sendable {
 }
 
 extension MessageStore {
-  public func attachments(for messageID: Int64) throws -> [AttachmentMeta] {
+  public func attachments(
+    for messageID: Int64,
+    options: AttachmentQueryOptions = .default
+  ) throws -> [AttachmentMeta] {
     let sql = """
       SELECT a.filename, a.transfer_name, a.uti, a.mime_type, a.total_bytes, a.is_sticker
       FROM message_attachment_join maj
@@ -278,17 +281,15 @@ extension MessageStore {
         let mimeType = stringValue(row[3])
         let totalBytes = int64Value(row[4]) ?? 0
         let isSticker = boolValue(row[5])
-        let resolved = AttachmentResolver.resolve(filename)
         metas.append(
-          AttachmentMeta(
+          AttachmentResolver.metadata(
             filename: filename,
             transferName: transferName,
             uti: uti,
             mimeType: mimeType,
             totalBytes: totalBytes,
             isSticker: isSticker,
-            originalPath: resolved.resolved,
-            missing: resolved.missing
+            options: options
           ))
       }
       return metas

@@ -30,14 +30,23 @@ enum CommandTestDatabase {
     return path
   }
 
-  static func makePathWithAttachment() throws -> String {
+  static func makePathWithAttachment(
+    filename: String = "/tmp/file.dat",
+    transferName: String = "file.dat",
+    uti: String = "public.data",
+    mimeType: String = "application/octet-stream"
+  ) throws -> String {
     let path = try makePath()
     let db = try Connection(path)
     try db.run(
       """
       INSERT INTO attachment(ROWID, filename, transfer_name, uti, mime_type, total_bytes, is_sticker)
-      VALUES (1, '/tmp/file.dat', 'file.dat', 'public.data', 'application/octet-stream', 10, 0)
-      """
+      VALUES (1, ?, ?, ?, ?, 10, 0)
+      """,
+      filename,
+      transferName,
+      uti,
+      mimeType
     )
     try db.run("INSERT INTO message_attachment_join(message_id, attachment_id) VALUES (1, 1)")
     return path
@@ -66,6 +75,34 @@ enum CommandTestDatabase {
       WHERE ROWID = 1
       """
     )
+    return try MessageStore(
+      connection: db,
+      path: ":memory:",
+      hasAttributedBody: false,
+      hasReactionColumns: false
+    )
+  }
+
+  static func makeStoreForRPCWithAttachment(
+    filename: String,
+    transferName: String,
+    uti: String,
+    mimeType: String
+  ) throws -> MessageStore {
+    let db = try Connection(.inMemory)
+    try createSchema(db, includeChatHandleJoin: true)
+    try seedRPCChat(db)
+    try db.run(
+      """
+      INSERT INTO attachment(ROWID, filename, transfer_name, uti, mime_type, total_bytes, is_sticker)
+      VALUES (1, ?, ?, ?, ?, 10, 0)
+      """,
+      filename,
+      transferName,
+      uti,
+      mimeType
+    )
+    try db.run("INSERT INTO message_attachment_join(message_id, attachment_id) VALUES (5, 1)")
     return try MessageStore(
       connection: db,
       path: ":memory:",

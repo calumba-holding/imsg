@@ -28,6 +28,10 @@ enum WatchCommand {
             label: "attachments", names: [.long("attachments")], help: "include attachment metadata"
           ),
           .make(
+            label: "convertAttachments", names: [.long("convert-attachments")],
+            help: "convert CAF/GIF attachments to model-compatible cached files"
+          ),
+          .make(
             label: "reactions", names: [.long("reactions")],
             help: "include reaction events (tapback add/remove) in the stream"
           ),
@@ -67,6 +71,8 @@ enum WatchCommand {
     }
     let sinceRowID = values.optionInt64("sinceRowID")
     let showAttachments = values.flag("attachments")
+    let attachmentOptions = AttachmentQueryOptions(
+      convertUnsupported: values.flag("convertAttachments"))
     let includeReactions = values.flag("reactions")
     let participants = values.optionValues("participants")
       .flatMap { $0.split(separator: ",").map { String($0) } }
@@ -99,6 +105,7 @@ enum WatchCommand {
           message: message,
           includeAttachments: true,
           includeReactions: true,
+          attachmentOptions: attachmentOptions,
           contactResolver: contacts
         )
         try JSONLines.printObject(payload)
@@ -120,12 +127,9 @@ enum WatchCommand {
       StdoutWriter.writeLine("\(timestamp) [\(direction)] \(sender): \(message.text)")
       if message.attachmentsCount > 0 {
         if showAttachments {
-          let metas = try store.attachments(for: message.rowID)
+          let metas = try store.attachments(for: message.rowID, options: attachmentOptions)
           for meta in metas {
-            let name = displayName(for: meta)
-            StdoutWriter.writeLine(
-              "  attachment: name=\(name) mime=\(meta.mimeType) missing=\(meta.missing) path=\(meta.originalPath)"
-            )
+            StdoutWriter.writeLine(attachmentMetadataLine(for: meta))
           }
         } else {
           StdoutWriter.writeLine(

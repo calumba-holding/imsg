@@ -141,6 +141,8 @@ func outputModelsEncodeExpectedKeys() throws {
     totalBytes: 10,
     isSticker: false,
     originalPath: "/tmp/file.dat",
+    convertedPath: "/tmp/file.m4a",
+    convertedMimeType: "audio/mp4",
     missing: false
   )
   let reaction = Reaction(
@@ -167,6 +169,8 @@ func outputModelsEncodeExpectedKeys() throws {
   let attachmentObject = try JSONSerialization.jsonObject(with: attachmentData) as? [String: Any]
   #expect(attachmentObject?["transfer_name"] as? String == "")
   #expect(attachmentObject?["mime_type"] as? String == "application/octet-stream")
+  #expect(attachmentObject?["converted_path"] as? String == "/tmp/file.m4a")
+  #expect(attachmentObject?["converted_mime_type"] as? String == "audio/mp4")
 }
 
 @Test

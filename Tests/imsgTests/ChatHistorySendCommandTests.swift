@@ -119,6 +119,45 @@ func historyCommandRunsWithAttachmentsNonJson() async throws {
 }
 
 @Test
+func historyCommandReportsConvertedAttachmentPath() async throws {
+  let source = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathExtension("gif")
+  try Data("gif".utf8).write(to: source)
+  defer { try? FileManager.default.removeItem(at: source) }
+  let converted = AttachmentResolver.convertedURL(for: source.path, targetExtension: "png")
+  try FileManager.default.createDirectory(
+    at: converted.deletingLastPathComponent(),
+    withIntermediateDirectories: true
+  )
+  try Data("png".utf8).write(to: converted)
+  defer { try? FileManager.default.removeItem(at: converted) }
+
+  let path = try CommandTestDatabase.makePathWithAttachment(
+    filename: source.path,
+    transferName: "animation.gif",
+    uti: "com.compuserve.gif",
+    mimeType: "image/gif"
+  )
+  let values = ParsedValues(
+    positional: [],
+    options: ["db": [path], "chatID": ["1"], "limit": ["5"]],
+    flags: ["attachments", "convertAttachments"]
+  )
+  let runtime = RuntimeOptions(parsedValues: values)
+  let (output, _) = try await StdoutCapture.capture {
+    try await HistoryCommand.run(
+      values: values,
+      runtime: runtime,
+      contactResolverFactory: { NoOpContactResolver() }
+    )
+  }
+
+  #expect(output.contains("converted_mime=image/png"))
+  #expect(output.contains("converted_path=\(converted.path)"))
+}
+
+@Test
 func chatsCommandRunsWithPlainOutput() async throws {
   let path = try CommandTestDatabase.makePath()
   let values = ParsedValues(

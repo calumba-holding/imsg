@@ -11,7 +11,11 @@ enum TestDatabase {
 
   static func makeStore(
     includeAttributedBody: Bool = false,
-    includeReactionColumns: Bool = false
+    includeReactionColumns: Bool = false,
+    attachmentFilename: String = "~/Library/Messages/Attachments/test.dat",
+    attachmentTransferName: String = "test.dat",
+    attachmentUTI: String = "public.data",
+    attachmentMimeType: String = "application/octet-stream"
   ) throws -> MessageStore {
     let db = try Connection(.inMemory)
     let attributedBodyColumn = includeAttributedBody ? "attributedBody BLOB," : ""
@@ -114,8 +118,12 @@ enum TestDatabase {
             total_bytes,
             is_sticker
           )
-          VALUES (1, '~/Library/Messages/Attachments/test.dat', 'test.dat', 'public.data', 'application/octet-stream', 123, 0)
-          """
+          VALUES (1, ?, ?, ?, ?, 123, 0)
+          """,
+          attachmentFilename,
+          attachmentTransferName,
+          attachmentUTI,
+          attachmentMimeType
         )
         try db.run(
           """
