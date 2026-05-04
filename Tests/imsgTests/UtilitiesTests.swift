@@ -63,6 +63,52 @@ func jsonLinesPrintsSingleLineJSON() throws {
 }
 
 @Test
+func jsonLinesEscapesEmbeddedNewlines() throws {
+  let line = try JSONLines.encode(["text": "Line 1\nLine 2"])
+  #expect(line.contains("\n") == false)
+  #expect(line.contains(#"\n"#) == true)
+
+  let data = line.data(using: .utf8)!
+  let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+  #expect(decoded?["text"] as? String == "Line 1\nLine 2")
+}
+
+@Test
+func jsonObjectOutputEscapesEmbeddedNewlines() async throws {
+  let captured = try await StdoutCapture.capture {
+    try JSONLines.printObject(["text": "Line 1\nLine 2"])
+  }
+
+  #expect(captured.output.filter { $0 == "\n" }.count == 1)
+  #expect(captured.output.contains(#"\n"#) == true)
+
+  let line = captured.output.trimmingCharacters(in: .newlines)
+  let data = line.data(using: .utf8)!
+  let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+  #expect(decoded?["text"] as? String == "Line 1\nLine 2")
+}
+
+@Test
+func rpcWriterEscapesEmbeddedNewlinesInNotifications() async throws {
+  let captured = await StdoutCapture.capture {
+    RPCWriter().sendNotification(
+      method: "message",
+      params: ["message": ["text": "Line 1\nLine 2"]]
+    )
+  }
+
+  #expect(captured.output.filter { $0 == "\n" }.count == 1)
+  #expect(captured.output.contains(#"\n"#) == true)
+
+  let line = captured.output.trimmingCharacters(in: .newlines)
+  let data = line.data(using: .utf8)!
+  let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+  let params = decoded?["params"] as? [String: Any]
+  let message = params?["message"] as? [String: Any]
+  #expect(message?["text"] as? String == "Line 1\nLine 2")
+}
+
+@Test
 func outputModelsEncodeExpectedKeys() throws {
   let chat = Chat(
     id: 1, identifier: "+123", name: "Test", service: "iMessage",
