@@ -190,13 +190,28 @@ public struct Chat: Sendable, Equatable {
   public let name: String
   public let service: String
   public let lastMessageAt: Date
+  public let accountID: String?
+  public let accountLogin: String?
+  public let lastAddressedHandle: String?
 
-  public init(id: Int64, identifier: String, name: String, service: String, lastMessageAt: Date) {
+  public init(
+    id: Int64,
+    identifier: String,
+    name: String,
+    service: String,
+    lastMessageAt: Date,
+    accountID: String? = nil,
+    accountLogin: String? = nil,
+    lastAddressedHandle: String? = nil
+  ) {
     self.id = id
     self.identifier = identifier
     self.name = name
     self.service = service
     self.lastMessageAt = lastMessageAt
+    self.accountID = accountID
+    self.accountLogin = accountLogin
+    self.lastAddressedHandle = lastAddressedHandle
   }
 }
 
@@ -206,13 +221,28 @@ public struct ChatInfo: Sendable, Equatable {
   public let guid: String
   public let name: String
   public let service: String
+  public let accountID: String?
+  public let accountLogin: String?
+  public let lastAddressedHandle: String?
 
-  public init(id: Int64, identifier: String, guid: String, name: String, service: String) {
+  public init(
+    id: Int64,
+    identifier: String,
+    guid: String,
+    name: String,
+    service: String,
+    accountID: String? = nil,
+    accountLogin: String? = nil,
+    lastAddressedHandle: String? = nil
+  ) {
     self.id = id
     self.identifier = identifier
     self.guid = guid
     self.name = name
     self.service = service
+    self.accountID = accountID
+    self.accountLogin = accountLogin
+    self.lastAddressedHandle = lastAddressedHandle
   }
 }
 

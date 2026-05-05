@@ -12,6 +12,9 @@ struct ChatPayload: Codable {
   let contactName: String?
   let isGroup: Bool
   let participants: [String]?
+  let accountID: String?
+  let accountLogin: String?
+  let lastAddressedHandle: String?
 
   init(
     chat: Chat, chatInfo: ChatInfo? = nil, participants: [String]? = nil, contactName: String? = nil
@@ -28,6 +31,9 @@ struct ChatPayload: Codable {
     self.contactName = contactName
     self.isGroup = isGroupHandle(identifier: identifier, guid: guid)
     self.participants = participants
+    self.accountID = chatInfo?.accountID ?? chat.accountID
+    self.accountLogin = chatInfo?.accountLogin ?? chat.accountLogin
+    self.lastAddressedHandle = chatInfo?.lastAddressedHandle ?? chat.lastAddressedHandle
   }
 
   enum CodingKeys: String, CodingKey {
@@ -41,6 +47,9 @@ struct ChatPayload: Codable {
     case contactName = "contact_name"
     case isGroup = "is_group"
     case participants
+    case accountID = "account_id"
+    case accountLogin = "account_login"
+    case lastAddressedHandle = "last_addressed_handle"
   }
 }
 
@@ -180,6 +189,9 @@ struct GroupPayload: Codable {
   let service: String
   let isGroup: Bool
   let participants: [String]
+  let accountID: String?
+  let accountLogin: String?
+  let lastAddressedHandle: String?
 
   init(chatInfo: ChatInfo, participants: [String]) {
     self.id = chatInfo.id
@@ -189,6 +201,9 @@ struct GroupPayload: Codable {
     self.service = chatInfo.service
     self.isGroup = isGroupHandle(identifier: chatInfo.identifier, guid: chatInfo.guid)
     self.participants = participants
+    self.accountID = chatInfo.accountID
+    self.accountLogin = chatInfo.accountLogin
+    self.lastAddressedHandle = chatInfo.lastAddressedHandle
   }
 
   enum CodingKeys: String, CodingKey {
@@ -199,6 +214,9 @@ struct GroupPayload: Codable {
     case service
     case isGroup = "is_group"
     case participants
+    case accountID = "account_id"
+    case accountLogin = "account_login"
+    case lastAddressedHandle = "last_addressed_handle"
   }
 }
 

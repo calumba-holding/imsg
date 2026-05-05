@@ -43,6 +43,9 @@ func chatInfoReturnsMetadata() throws {
   #expect(info?.guid == "iMessage;+;chat123")
   #expect(info?.name == "Test Chat")
   #expect(info?.service == "iMessage")
+  #expect(info?.accountID == "iMessage;+;me@icloud.com")
+  #expect(info?.accountLogin == "me@icloud.com")
+  #expect(info?.lastAddressedHandle == "+15551234567")
 }
 
 @Test

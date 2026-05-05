@@ -40,6 +40,15 @@ enum GroupCommand {
     StdoutWriter.writeLine("guid: \(info.guid)")
     StdoutWriter.writeLine("name: \(info.name)")
     StdoutWriter.writeLine("service: \(info.service)")
+    if let accountID = info.accountID {
+      StdoutWriter.writeLine("account_id: \(accountID)")
+    }
+    if let accountLogin = info.accountLogin {
+      StdoutWriter.writeLine("account_login: \(accountLogin)")
+    }
+    if let lastAddressedHandle = info.lastAddressedHandle {
+      StdoutWriter.writeLine("last_addressed_handle: \(lastAddressedHandle)")
+    }
     let isGroup = isGroupHandle(identifier: info.identifier, guid: info.guid)
     StdoutWriter.writeLine("is_group: \(isGroup)")
     if participants.isEmpty {

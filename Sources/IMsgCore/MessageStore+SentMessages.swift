@@ -7,9 +7,16 @@ extension MessageStore {
     guard !candidates.isEmpty else { return nil }
 
     let placeholders = Array(repeating: "?", count: candidates.count).joined(separator: ",")
+    let accountIDColumn = hasChatAccountIDColumn ? "IFNULL(c.account_id, '')" : "''"
+    let accountLoginColumn = hasChatAccountLoginColumn ? "IFNULL(c.account_login, '')" : "''"
+    let lastAddressedHandleColumn =
+      hasChatLastAddressedHandleColumn ? "IFNULL(c.last_addressed_handle, '')" : "''"
     let sql = """
       SELECT c.ROWID, IFNULL(c.chat_identifier, '') AS identifier, IFNULL(c.guid, '') AS guid,
-             IFNULL(c.display_name, c.chat_identifier) AS name, IFNULL(c.service_name, '') AS service
+             IFNULL(c.display_name, c.chat_identifier) AS name, IFNULL(c.service_name, '') AS service,
+             \(accountIDColumn) AS account_id,
+             \(accountLoginColumn) AS account_login,
+             \(lastAddressedHandleColumn) AS last_addressed_handle
       FROM chat c
       WHERE c.chat_identifier IN (\(placeholders))
          OR c.guid IN (\(placeholders))
@@ -23,7 +30,10 @@ extension MessageStore {
         identifier: stringValue(row[1]),
         guid: stringValue(row[2]),
         name: stringValue(row[3]),
-        service: stringValue(row[4])
+        service: stringValue(row[4]),
+        accountID: stringValue(row[5]).nilIfEmpty,
+        accountLogin: stringValue(row[6]).nilIfEmpty,
+        lastAddressedHandle: stringValue(row[7]).nilIfEmpty
       )
     }
   }

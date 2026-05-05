@@ -12,6 +12,8 @@
 - `chat.chat_identifier` -> group handle (used by Messages).
 - `chat.guid` -> group GUID (often same chat handle semantics).
 - `chat.display_name` -> group name (optional).
+- `chat.account_id`, `chat.account_login`, `chat.last_addressed_handle` ->
+  read-only Messages routing hints for the local account/identity state.
 - Participants in `chat_handle_join` + `handle`.
 
 ## Sending to a group
@@ -30,6 +32,9 @@ The direct CLI (`imsg chats`, `imsg history`, `imsg watch`) and JSON-RPC surface
 - `chat_identifier`
 - `chat_guid`
 - `chat_name`
+- `account_id`
+- `account_login`
+- `last_addressed_handle`
 - `participants` (array of handles)
 - `is_group`
 
@@ -40,6 +45,13 @@ The direct CLI (`imsg chats`, `imsg history`, `imsg watch`) and JSON-RPC surface
 stores external handles. The local user's handle is implicit and message-specific:
 use `is_from_me` plus `destination_caller_id` on sent messages when that distinction
 matters.
+
+### Multiple local identities
+Messages.app can store multiple local-account hints for a chat, but its
+AppleScript `send` command does not expose a `from` or account selector. `imsg`
+reports `account_id`, `account_login`, `last_addressed_handle`, and sent-message
+`destination_caller_id` so callers can diagnose routing, but normal sends cannot
+force a specific phone number when several numbers share one Apple ID.
 
 ## Focused group lookup
 - `imsg group --chat-id <rowid>` prints id, identifier, guid, name, service,

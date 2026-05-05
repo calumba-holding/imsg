@@ -4,6 +4,7 @@
 - feat: add completion script and LLM reference generation (#21, thanks @bdmorin)
 - feat: optionally expose model-compatible converted attachment files for CAF/GIF metadata (#73, thanks @mfzeidan)
 - feat: add `imsg group` chat metadata lookup and group fields to `chats --json` (#88, thanks @mryanb)
+- feat: expose read-only chat account routing hints for multi-number diagnostics (#18)
 - fix: return best-effort message `id` and `guid` from RPC `send` responses (#85)
 - fix: keep watch streams alive with a periodic poll fallback when filesystem events are missed (#78)
 - fix: detect Tahoe group-send ghost rows and fail instead of reporting false success (#90, thanks @loop)

@@ -59,6 +59,9 @@ func groupCommandPrintsPlainTextForGroup() async throws {
   #expect(output.contains("guid: iMessage;+;chat123"))
   #expect(output.contains("name: Test Chat"))
   #expect(output.contains("service: iMessage"))
+  #expect(output.contains("account_id: iMessage;+;me@icloud.com"))
+  #expect(output.contains("account_login: me@icloud.com"))
+  #expect(output.contains("last_addressed_handle: +15551234567"))
   #expect(output.contains("is_group: true"))
   #expect(output.contains("- +123"))
 }
@@ -81,6 +84,9 @@ func groupCommandEmitsJsonPayload() async throws {
   #expect(payload["guid"] as? String == "iMessage;+;chat123")
   #expect(payload["name"] as? String == "Test Chat")
   #expect(payload["service"] as? String == "iMessage")
+  #expect(payload["account_id"] as? String == "iMessage;+;me@icloud.com")
+  #expect(payload["account_login"] as? String == "me@icloud.com")
+  #expect(payload["last_addressed_handle"] as? String == "+15551234567")
   #expect(payload["is_group"] as? Bool == true)
   #expect(payload["participants"] as? [String] == ["+123"])
 }

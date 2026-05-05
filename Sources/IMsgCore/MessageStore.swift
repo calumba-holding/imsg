@@ -22,6 +22,9 @@ public final class MessageStore: @unchecked Sendable {
   let hasAttachmentUserInfo: Bool
   let hasBalloonBundleIDColumn: Bool
   let hasChatMessageJoinMessageDateColumn: Bool
+  let hasChatAccountIDColumn: Bool
+  let hasChatAccountLoginColumn: Bool
+  let hasChatLastAddressedHandleColumn: Bool
 
   private struct URLBalloonDedupeEntry: Sendable {
     let rowID: Int64
@@ -52,6 +55,7 @@ public final class MessageStore: @unchecked Sendable {
         connection: self.connection,
         table: "chat_message_join"
       )
+      let chatColumns = MessageStore.tableColumns(connection: self.connection, table: "chat")
       self.hasAttributedBody = messageColumns.contains("attributedbody")
       self.hasReactionColumns = MessageStore.reactionColumnsPresent(in: messageColumns)
       self.hasThreadOriginatorGUIDColumn = messageColumns.contains("thread_originator_guid")
@@ -60,6 +64,9 @@ public final class MessageStore: @unchecked Sendable {
       self.hasAttachmentUserInfo = attachmentColumns.contains("user_info")
       self.hasBalloonBundleIDColumn = messageColumns.contains("balloon_bundle_id")
       self.hasChatMessageJoinMessageDateColumn = chatMessageJoinColumns.contains("message_date")
+      self.hasChatAccountIDColumn = chatColumns.contains("account_id")
+      self.hasChatAccountLoginColumn = chatColumns.contains("account_login")
+      self.hasChatLastAddressedHandleColumn = chatColumns.contains("last_addressed_handle")
     } catch {
       throw MessageStore.enhance(error: error, path: normalized)
     }
@@ -75,7 +82,10 @@ public final class MessageStore: @unchecked Sendable {
     hasAudioMessageColumn: Bool? = nil,
     hasAttachmentUserInfo: Bool? = nil,
     hasBalloonBundleIDColumn: Bool? = nil,
-    hasChatMessageJoinMessageDateColumn: Bool? = nil
+    hasChatMessageJoinMessageDateColumn: Bool? = nil,
+    hasChatAccountIDColumn: Bool? = nil,
+    hasChatAccountLoginColumn: Bool? = nil,
+    hasChatLastAddressedHandleColumn: Bool? = nil
   ) throws {
     self.path = path
     self.queue = DispatchQueue(label: "imsg.db.test", qos: .userInitiated)
@@ -88,6 +98,7 @@ public final class MessageStore: @unchecked Sendable {
       connection: connection,
       table: "chat_message_join"
     )
+    let chatColumns = MessageStore.tableColumns(connection: connection, table: "chat")
     if let hasAttributedBody {
       self.hasAttributedBody = hasAttributedBody
     } else {
@@ -128,94 +139,20 @@ public final class MessageStore: @unchecked Sendable {
     } else {
       self.hasChatMessageJoinMessageDateColumn = chatMessageJoinColumns.contains("message_date")
     }
-  }
-
-  public func listChats(limit: Int) throws -> [Chat] {
-    let sql: String
-    if hasChatMessageJoinMessageDateColumn {
-      sql = """
-        SELECT c.ROWID, IFNULL(c.display_name, c.chat_identifier) AS name, c.chat_identifier,
-               c.service_name, MAX(cmj.message_date) AS last_date
-        FROM chat c
-        JOIN chat_message_join cmj ON c.ROWID = cmj.chat_id
-        GROUP BY c.ROWID
-        ORDER BY last_date DESC
-        LIMIT ?
-        """
+    if let hasChatAccountIDColumn {
+      self.hasChatAccountIDColumn = hasChatAccountIDColumn
     } else {
-      sql = """
-        SELECT c.ROWID, IFNULL(c.display_name, c.chat_identifier) AS name, c.chat_identifier,
-               c.service_name, MAX(m.date) AS last_date
-        FROM chat c
-        JOIN chat_message_join cmj ON c.ROWID = cmj.chat_id
-        JOIN message m ON m.ROWID = cmj.message_id
-        GROUP BY c.ROWID
-        ORDER BY last_date DESC
-        LIMIT ?
-        """
+      self.hasChatAccountIDColumn = chatColumns.contains("account_id")
     }
-    return try withConnection { db in
-      var chats: [Chat] = []
-      for row in try db.prepare(sql, limit) {
-        let id = int64Value(row[0]) ?? 0
-        let name = stringValue(row[1])
-        let identifier = stringValue(row[2])
-        let service = stringValue(row[3])
-        let lastDate = appleDate(from: int64Value(row[4]))
-        chats.append(
-          Chat(
-            id: id, identifier: identifier, name: name, service: service, lastMessageAt: lastDate))
-      }
-      return chats
+    if let hasChatAccountLoginColumn {
+      self.hasChatAccountLoginColumn = hasChatAccountLoginColumn
+    } else {
+      self.hasChatAccountLoginColumn = chatColumns.contains("account_login")
     }
-  }
-
-  public func chatInfo(chatID: Int64) throws -> ChatInfo? {
-    let sql = """
-      SELECT c.ROWID, IFNULL(c.chat_identifier, '') AS identifier, IFNULL(c.guid, '') AS guid,
-             IFNULL(c.display_name, c.chat_identifier) AS name, IFNULL(c.service_name, '') AS service
-      FROM chat c
-      WHERE c.ROWID = ?
-      LIMIT 1
-      """
-    return try withConnection { db in
-      for row in try db.prepare(sql, chatID) {
-        let id = int64Value(row[0]) ?? 0
-        let identifier = stringValue(row[1])
-        let guid = stringValue(row[2])
-        let name = stringValue(row[3])
-        let service = stringValue(row[4])
-        return ChatInfo(
-          id: id,
-          identifier: identifier,
-          guid: guid,
-          name: name,
-          service: service
-        )
-      }
-      return nil
-    }
-  }
-
-  public func participants(chatID: Int64) throws -> [String] {
-    let sql = """
-      SELECT h.id
-      FROM chat_handle_join chj
-      JOIN handle h ON h.ROWID = chj.handle_id
-      WHERE chj.chat_id = ?
-      ORDER BY h.id ASC
-      """
-    return try withConnection { db in
-      var results: [String] = []
-      var seen = Set<String>()
-      for row in try db.prepare(sql, chatID) {
-        let handle = stringValue(row[0])
-        if handle.isEmpty { continue }
-        if seen.insert(handle).inserted {
-          results.append(handle)
-        }
-      }
-      return results
+    if let hasChatLastAddressedHandleColumn {
+      self.hasChatLastAddressedHandleColumn = hasChatLastAddressedHandleColumn
+    } else {
+      self.hasChatLastAddressedHandleColumn = chatColumns.contains("last_addressed_handle")
     }
   }
 
@@ -258,6 +195,12 @@ public final class MessageStore: @unchecked Sendable {
     guard !urlBalloonDedupe.isEmpty else { return }
     let cutoff = referenceDate.addingTimeInterval(-MessageStore.urlBalloonDedupeRetention)
     urlBalloonDedupe = urlBalloonDedupe.filter { $0.value.date >= cutoff }
+  }
+}
+
+extension String {
+  var nilIfEmpty: String? {
+    isEmpty ? nil : self
   }
 }
 

@@ -48,7 +48,10 @@ enum TestDatabase {
         chat_identifier TEXT,
         guid TEXT,
         display_name TEXT,
-        service_name TEXT
+        service_name TEXT,
+        account_id TEXT,
+        account_login TEXT,
+        last_addressed_handle TEXT
       );
       """
     )
@@ -80,8 +83,14 @@ enum TestDatabase {
     let now = Date()
     try db.run(
       """
-      INSERT INTO chat(ROWID, chat_identifier, guid, display_name, service_name)
-      VALUES (1, '+123', 'iMessage;+;chat123', 'Test Chat', 'iMessage')
+      INSERT INTO chat(
+        ROWID, chat_identifier, guid, display_name, service_name,
+        account_id, account_login, last_addressed_handle
+      )
+      VALUES (
+        1, '+123', 'iMessage;+;chat123', 'Test Chat', 'iMessage',
+        'iMessage;+;me@icloud.com', 'me@icloud.com', '+15551234567'
+      )
       """
     )
     try db.run("INSERT INTO handle(ROWID, id) VALUES (1, '+123'), (2, 'Me')")

@@ -10,6 +10,9 @@ func listChatsReturnsChat() throws {
   let chats = try store.listChats(limit: 5)
   #expect(chats.count == 1)
   #expect(chats.first?.identifier == "+123")
+  #expect(chats.first?.accountID == "iMessage;+;me@icloud.com")
+  #expect(chats.first?.accountLogin == "me@icloud.com")
+  #expect(chats.first?.lastAddressedHandle == "+15551234567")
 }
 
 @Test
@@ -58,4 +61,7 @@ func listChatsUsesChatMessageJoinDateWithoutMessageJoinWhenAvailable() throws {
   let chats = try store.listChats(limit: 1)
   #expect(chats.count == 1)
   #expect(chats.first?.identifier == "+222")
+  #expect(chats.first?.accountID == nil)
+  #expect(chats.first?.accountLogin == nil)
+  #expect(chats.first?.lastAddressedHandle == nil)
 }

@@ -26,6 +26,9 @@ func chatsCommandRunsWithJsonOutput() async throws {
   #expect(payload["is_group"] as? Bool == true)
   #expect(payload["guid"] as? String == "iMessage;+;chat123")
   #expect(payload["display_name"] as? String == "Test Chat")
+  #expect(payload["account_id"] as? String == "iMessage;+;me@icloud.com")
+  #expect(payload["account_login"] as? String == "me@icloud.com")
+  #expect(payload["last_addressed_handle"] as? String == "+15551234567")
   #expect(payload["participants"] as? [String] == ["+123"])
 }
 
@@ -49,6 +52,9 @@ func chatsCommandJsonReportsDirectChatMetadata() async throws {
   #expect(payload["is_group"] as? Bool == false)
   #expect(payload["guid"] as? String == "iMessage;-;+123")
   #expect(payload["display_name"] as? String == "Direct Chat")
+  #expect(payload["account_id"] as? String == "iMessage;+;me@icloud.com")
+  #expect(payload["account_login"] as? String == "me@icloud.com")
+  #expect(payload["last_addressed_handle"] as? String == "+15551234567")
   #expect(payload["participants"] as? [String] == ["+123"])
 }
 

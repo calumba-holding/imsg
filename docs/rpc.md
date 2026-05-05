@@ -90,6 +90,9 @@ is not joined to the target chat. That case is reported as an error instead of
 - `guid` (string, optional)
 - `service` (string)
 - `last_message_at` (ISO8601)
+- `account_id` (string, optional)
+- `account_login` (string, optional)
+- `last_addressed_handle` (string, optional)
 - `participants` (array, optional)
 - `is_group` (bool, optional)
 
@@ -110,6 +113,10 @@ is not joined to the target chat. That case is reported as an error instead of
 - `chat_name`
 - `participants`
 - `is_group`
+
+`account_id`, `account_login`, `last_addressed_handle`, and sent-message
+`destination_caller_id` are read-only routing diagnostics from Messages. The
+AppleScript send API does not expose a `from` account or phone-number selector.
 
 ## Examples
 

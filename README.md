@@ -121,11 +121,14 @@ the calling terminal or parent app; Automation permission is only needed for
 send/read/typing/reaction commands that control Messages.app.
 
 ## JSON output
-`imsg chats --json` emits one JSON object per chat with fields: `id`, `name`, `identifier`, `service`, `last_message_at`, `guid`, `display_name`, `contact_name`, `is_group`, `participants`.
+`imsg chats --json` emits one JSON object per chat with fields: `id`, `name`, `identifier`, `service`, `last_message_at`, `guid`, `display_name`, `contact_name`, `is_group`, `participants`, `account_id`, `account_login`, `last_addressed_handle`.
 `imsg history --json` and `imsg watch --json` emit one JSON object per message with fields: `id`, `chat_id`, `chat_identifier`, `chat_guid`, `chat_name`, `participants`, `is_group`, `guid`, `reply_to_guid`, `destination_caller_id`, `sender`, `sender_name`, `is_from_me`, `text`, `created_at`, `attachments` (array of metadata with `filename`, `transfer_name`, `uti`, `mime_type`, `total_bytes`, `is_sticker`, `original_path`, `converted_path`, `converted_mime_type`, `missing`), `reactions`.
 When `watch --reactions --json` sees a tapback event, the message object also includes `is_reaction`, `reaction_type`, `reaction_emoji`, `is_reaction_add`, and `reacted_to_guid`.
 
-Note: `reply_to_guid`, `destination_caller_id`, and `reactions` are read-only metadata.
+Note: `reply_to_guid`, `destination_caller_id`, `account_id`, `account_login`,
+`last_addressed_handle`, and `reactions` are read-only metadata. They help
+inspect Messages routing state, but `imsg send` cannot force a specific
+outgoing Apple ID phone number or inline reply target through AppleScript.
 
 ## Permissions troubleshooting
 If you see “unable to open database file” or empty output:
