@@ -1,4 +1,7 @@
-# Releasing
+---
+title: Releasing
+description: "Cutting an imsg release: changelog, version bump, signed/notarized build, tag, GitHub release, Homebrew tap update."
+---
 
 ## Release notes source
 - GitHub Release notes come from `CHANGELOG.md` for the matching version section (`## X.Y.Z - YYYY-MM-DD`).
