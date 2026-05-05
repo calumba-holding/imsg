@@ -54,7 +54,7 @@ extension MessageStore {
   }
 
   public func reactions(for messages: [Message]) throws -> [Int64: [Reaction]] {
-    guard hasReactionColumns else { return [:] }
+    guard schema.hasReactionColumns else { return [:] }
 
     var messageIDByGUID: [String: Int64] = [:]
     for message in messages where !message.guid.isEmpty {
@@ -89,7 +89,7 @@ extension MessageStore {
       repeating: "r.associated_message_guid LIKE ?",
       count: guids.count
     ).joined(separator: " OR ")
-    let bodyColumn = hasAttributedBody ? "r.attributedBody" : "NULL"
+    let bodyColumn = schema.hasAttributedBody ? "r.attributedBody" : "NULL"
     let sql = """
       SELECT r.ROWID AS reaction_rowid, r.associated_message_guid AS associated_message_guid,
              r.associated_message_type AS associated_message_type, h.id AS sender,

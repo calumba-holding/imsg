@@ -14,17 +14,7 @@ public final class MessageStore: @unchecked Sendable {
   private let connection: Connection
   private let queue: DispatchQueue
   private let queueKey = DispatchSpecificKey<Void>()
-  let hasAttributedBody: Bool
-  let hasReactionColumns: Bool
-  let hasThreadOriginatorGUIDColumn: Bool
-  let hasDestinationCallerID: Bool
-  let hasAudioMessageColumn: Bool
-  let hasAttachmentUserInfo: Bool
-  let hasBalloonBundleIDColumn: Bool
-  let hasChatMessageJoinMessageDateColumn: Bool
-  let hasChatAccountIDColumn: Bool
-  let hasChatAccountLoginColumn: Bool
-  let hasChatLastAddressedHandleColumn: Bool
+  let schema: MessageStoreSchema
 
   private struct URLBalloonDedupeEntry: Sendable {
     let rowID: Int64
@@ -46,27 +36,7 @@ public final class MessageStore: @unchecked Sendable {
       let location = Connection.Location.uri(uri, parameters: [.mode(.readOnly)])
       self.connection = try Connection(location, readonly: true)
       self.connection.busyTimeout = 5
-      let messageColumns = MessageStore.tableColumns(connection: self.connection, table: "message")
-      let attachmentColumns = MessageStore.tableColumns(
-        connection: self.connection,
-        table: "attachment"
-      )
-      let chatMessageJoinColumns = MessageStore.tableColumns(
-        connection: self.connection,
-        table: "chat_message_join"
-      )
-      let chatColumns = MessageStore.tableColumns(connection: self.connection, table: "chat")
-      self.hasAttributedBody = messageColumns.contains("attributedbody")
-      self.hasReactionColumns = MessageStore.reactionColumnsPresent(in: messageColumns)
-      self.hasThreadOriginatorGUIDColumn = messageColumns.contains("thread_originator_guid")
-      self.hasDestinationCallerID = messageColumns.contains("destination_caller_id")
-      self.hasAudioMessageColumn = messageColumns.contains("is_audio_message")
-      self.hasAttachmentUserInfo = attachmentColumns.contains("user_info")
-      self.hasBalloonBundleIDColumn = messageColumns.contains("balloon_bundle_id")
-      self.hasChatMessageJoinMessageDateColumn = chatMessageJoinColumns.contains("message_date")
-      self.hasChatAccountIDColumn = chatColumns.contains("account_id")
-      self.hasChatAccountLoginColumn = chatColumns.contains("account_login")
-      self.hasChatLastAddressedHandleColumn = chatColumns.contains("last_addressed_handle")
+      self.schema = MessageStoreSchema(connection: self.connection)
     } catch {
       throw MessageStore.enhance(error: error, path: normalized)
     }
@@ -92,68 +62,20 @@ public final class MessageStore: @unchecked Sendable {
     self.queue.setSpecific(key: queueKey, value: ())
     self.connection = connection
     self.connection.busyTimeout = 5
-    let messageColumns = MessageStore.tableColumns(connection: connection, table: "message")
-    let attachmentColumns = MessageStore.tableColumns(connection: connection, table: "attachment")
-    let chatMessageJoinColumns = MessageStore.tableColumns(
-      connection: connection,
-      table: "chat_message_join"
+    self.schema = MessageStoreSchema(
+      base: MessageStoreSchema(connection: connection),
+      hasAttributedBody: hasAttributedBody,
+      hasReactionColumns: hasReactionColumns,
+      hasThreadOriginatorGUIDColumn: hasThreadOriginatorGUIDColumn,
+      hasDestinationCallerID: hasDestinationCallerID,
+      hasAudioMessageColumn: hasAudioMessageColumn,
+      hasAttachmentUserInfo: hasAttachmentUserInfo,
+      hasBalloonBundleIDColumn: hasBalloonBundleIDColumn,
+      hasChatMessageJoinMessageDateColumn: hasChatMessageJoinMessageDateColumn,
+      hasChatAccountIDColumn: hasChatAccountIDColumn,
+      hasChatAccountLoginColumn: hasChatAccountLoginColumn,
+      hasChatLastAddressedHandleColumn: hasChatLastAddressedHandleColumn
     )
-    let chatColumns = MessageStore.tableColumns(connection: connection, table: "chat")
-    if let hasAttributedBody {
-      self.hasAttributedBody = hasAttributedBody
-    } else {
-      self.hasAttributedBody = messageColumns.contains("attributedbody")
-    }
-    if let hasReactionColumns {
-      self.hasReactionColumns = hasReactionColumns
-    } else {
-      self.hasReactionColumns = MessageStore.reactionColumnsPresent(in: messageColumns)
-    }
-    if let hasThreadOriginatorGUIDColumn {
-      self.hasThreadOriginatorGUIDColumn = hasThreadOriginatorGUIDColumn
-    } else {
-      self.hasThreadOriginatorGUIDColumn = messageColumns.contains("thread_originator_guid")
-    }
-    if let hasDestinationCallerID {
-      self.hasDestinationCallerID = hasDestinationCallerID
-    } else {
-      self.hasDestinationCallerID = messageColumns.contains("destination_caller_id")
-    }
-    if let hasAudioMessageColumn {
-      self.hasAudioMessageColumn = hasAudioMessageColumn
-    } else {
-      self.hasAudioMessageColumn = messageColumns.contains("is_audio_message")
-    }
-    if let hasAttachmentUserInfo {
-      self.hasAttachmentUserInfo = hasAttachmentUserInfo
-    } else {
-      self.hasAttachmentUserInfo = attachmentColumns.contains("user_info")
-    }
-    if let hasBalloonBundleIDColumn {
-      self.hasBalloonBundleIDColumn = hasBalloonBundleIDColumn
-    } else {
-      self.hasBalloonBundleIDColumn = messageColumns.contains("balloon_bundle_id")
-    }
-    if let hasChatMessageJoinMessageDateColumn {
-      self.hasChatMessageJoinMessageDateColumn = hasChatMessageJoinMessageDateColumn
-    } else {
-      self.hasChatMessageJoinMessageDateColumn = chatMessageJoinColumns.contains("message_date")
-    }
-    if let hasChatAccountIDColumn {
-      self.hasChatAccountIDColumn = hasChatAccountIDColumn
-    } else {
-      self.hasChatAccountIDColumn = chatColumns.contains("account_id")
-    }
-    if let hasChatAccountLoginColumn {
-      self.hasChatAccountLoginColumn = hasChatAccountLoginColumn
-    } else {
-      self.hasChatAccountLoginColumn = chatColumns.contains("account_login")
-    }
-    if let hasChatLastAddressedHandleColumn {
-      self.hasChatLastAddressedHandleColumn = hasChatLastAddressedHandleColumn
-    } else {
-      self.hasChatLastAddressedHandleColumn = chatColumns.contains("last_addressed_handle")
-    }
   }
 
   func withConnection<T>(_ block: (Connection) throws -> T) throws -> T {
@@ -242,7 +164,7 @@ extension MessageStore {
   }
 
   func audioTranscription(for messageID: Int64) throws -> String? {
-    guard hasAttachmentUserInfo else { return nil }
+    guard schema.hasAttachmentUserInfo else { return nil }
     let sql = """
       SELECT a.user_info
       FROM message_attachment_join maj
@@ -291,12 +213,12 @@ extension MessageStore {
   }
 
   public func reactions(for messageID: Int64) throws -> [Reaction] {
-    guard hasReactionColumns else { return [] }
+    guard schema.hasReactionColumns else { return [] }
     // Reactions are stored as messages with associated_message_type in range 2000-2006
     // 2000-2005 are standard tapbacks, 2006 is custom emoji reactions
     // They reference the original message via associated_message_guid which has format "p:X/GUID"
     // where X is the part index (0 for single-part messages) and GUID matches the original message's guid
-    let bodyColumn = hasAttributedBody ? "r.attributedBody" : "NULL"
+    let bodyColumn = schema.hasAttributedBody ? "r.attributedBody" : "NULL"
     let sql = """
       SELECT r.ROWID AS reaction_rowid, r.associated_message_type AS associated_message_type,
              h.id AS sender, r.is_from_me AS is_from_me, r.date AS date, IFNULL(r.text, '') AS text,

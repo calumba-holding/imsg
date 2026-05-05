@@ -3,12 +3,12 @@ import SQLite
 
 extension MessageStore {
   public func listChats(limit: Int) throws -> [Chat] {
-    let accountIDColumn = hasChatAccountIDColumn ? "IFNULL(c.account_id, '')" : "''"
-    let accountLoginColumn = hasChatAccountLoginColumn ? "IFNULL(c.account_login, '')" : "''"
+    let accountIDColumn = schema.hasChatAccountIDColumn ? "IFNULL(c.account_id, '')" : "''"
+    let accountLoginColumn = schema.hasChatAccountLoginColumn ? "IFNULL(c.account_login, '')" : "''"
     let lastAddressedHandleColumn =
-      hasChatLastAddressedHandleColumn ? "IFNULL(c.last_addressed_handle, '')" : "''"
+      schema.hasChatLastAddressedHandleColumn ? "IFNULL(c.last_addressed_handle, '')" : "''"
     let sql: String
-    if hasChatMessageJoinMessageDateColumn {
+    if schema.hasChatMessageJoinMessageDateColumn {
       sql = """
         SELECT c.ROWID AS chat_rowid, IFNULL(c.display_name, c.chat_identifier) AS name,
                c.chat_identifier AS chat_identifier, c.service_name AS service_name,
@@ -59,10 +59,10 @@ extension MessageStore {
   }
 
   public func chatInfo(chatID: Int64) throws -> ChatInfo? {
-    let accountIDColumn = hasChatAccountIDColumn ? "IFNULL(c.account_id, '')" : "''"
-    let accountLoginColumn = hasChatAccountLoginColumn ? "IFNULL(c.account_login, '')" : "''"
+    let accountIDColumn = schema.hasChatAccountIDColumn ? "IFNULL(c.account_id, '')" : "''"
+    let accountLoginColumn = schema.hasChatAccountLoginColumn ? "IFNULL(c.account_login, '')" : "''"
     let lastAddressedHandleColumn =
-      hasChatLastAddressedHandleColumn ? "IFNULL(c.last_addressed_handle, '')" : "''"
+      schema.hasChatLastAddressedHandleColumn ? "IFNULL(c.last_addressed_handle, '')" : "''"
     let sql = """
       SELECT c.ROWID AS chat_rowid, IFNULL(c.chat_identifier, '') AS identifier, IFNULL(c.guid, '') AS guid,
              IFNULL(c.display_name, c.chat_identifier) AS name, IFNULL(c.service_name, '') AS service,

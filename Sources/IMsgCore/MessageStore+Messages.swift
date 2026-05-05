@@ -66,15 +66,16 @@ private struct MessageRowSelection {
 
   init(store: MessageStore, includeChatID: Bool, includeBalloonBundleID: Bool = false) {
     let columns = MessageRowColumns.message(chatID: includeChatID ? "chat_id" : nil)
-    let bodyColumn = store.hasAttributedBody ? "m.attributedBody" : "NULL"
-    let guidColumn = store.hasReactionColumns ? "m.guid" : "NULL"
-    let associatedGuidColumn = store.hasReactionColumns ? "m.associated_message_guid" : "NULL"
-    let associatedTypeColumn = store.hasReactionColumns ? "m.associated_message_type" : "NULL"
+    let schema = store.schema
+    let bodyColumn = schema.hasAttributedBody ? "m.attributedBody" : "NULL"
+    let guidColumn = schema.hasReactionColumns ? "m.guid" : "NULL"
+    let associatedGuidColumn = schema.hasReactionColumns ? "m.associated_message_guid" : "NULL"
+    let associatedTypeColumn = schema.hasReactionColumns ? "m.associated_message_type" : "NULL"
     let destinationCallerColumn =
-      store.hasDestinationCallerID ? "m.destination_caller_id" : "NULL"
-    let audioMessageColumn = store.hasAudioMessageColumn ? "m.is_audio_message" : "0"
+      schema.hasDestinationCallerID ? "m.destination_caller_id" : "NULL"
+    let audioMessageColumn = schema.hasAudioMessageColumn ? "m.is_audio_message" : "0"
     let threadOriginatorColumn =
-      store.hasThreadOriginatorGUIDColumn ? "m.thread_originator_guid" : "NULL"
+      schema.hasThreadOriginatorGUIDColumn ? "m.thread_originator_guid" : "NULL"
     let chatColumn = includeChatID ? ", cmj.chat_id AS \(columns.chatID!)" : ""
 
     var selectList = """
@@ -91,7 +92,7 @@ private struct MessageRowSelection {
              \(threadOriginatorColumn) AS \(columns.threadOriginatorGUID)
       """
     if includeBalloonBundleID {
-      let balloonColumn = store.hasBalloonBundleIDColumn ? "m.balloon_bundle_id" : "NULL"
+      let balloonColumn = schema.hasBalloonBundleIDColumn ? "m.balloon_bundle_id" : "NULL"
       selectList += ",\n             \(balloonColumn) AS \(MessageRowColumns.balloonBundleID)"
     }
 
@@ -106,10 +107,11 @@ extension MessageStore {
   }
 
   public func messages(chatID: Int64, limit: Int, filter: MessageFilter?) throws -> [Message] {
-    let destinationCallerColumn = hasDestinationCallerID ? "m.destination_caller_id" : "NULL"
+    let destinationCallerColumn =
+      schema.hasDestinationCallerID ? "m.destination_caller_id" : "NULL"
     let selection = MessageRowSelection(store: self, includeChatID: false)
     let reactionFilter =
-      hasReactionColumns
+      schema.hasReactionColumns
       ? " AND (m.associated_message_type IS NULL OR m.associated_message_type < 2000 OR m.associated_message_type > 3006)"
       : ""
     var sql = """
@@ -204,7 +206,7 @@ extension MessageStore {
     if includeReactions {
       reactionFilter = ""
     } else {
-      if hasReactionColumns {
+      if schema.hasReactionColumns {
         reactionFilter =
           " AND (m.associated_message_type IS NULL OR m.associated_message_type < 2000 OR m.associated_message_type > 3006)"
       } else {

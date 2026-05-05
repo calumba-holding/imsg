@@ -56,10 +56,11 @@ extension MessageStore {
   public func reactionEventsAfter(afterRowID: Int64, chatID: Int64?, limit: Int) throws
     -> [ReactionEvent]
   {
-    guard hasReactionColumns else { return [] }
+    guard schema.hasReactionColumns else { return [] }
 
-    let bodyColumn = hasAttributedBody ? "m.attributedBody" : "NULL"
-    let destinationCallerColumn = hasDestinationCallerID ? "m.destination_caller_id" : "NULL"
+    let bodyColumn = schema.hasAttributedBody ? "m.attributedBody" : "NULL"
+    let destinationCallerColumn =
+      schema.hasDestinationCallerID ? "m.destination_caller_id" : "NULL"
 
     var sql = """
       SELECT m.ROWID AS reaction_rowid, cmj.chat_id AS chat_id,
