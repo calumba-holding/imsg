@@ -18,66 +18,12 @@ enum TestDatabase {
     attachmentMimeType: String = "application/octet-stream"
   ) throws -> MessageStore {
     let db = try Connection(.inMemory)
-    let attributedBodyColumn = includeAttributedBody ? "attributedBody BLOB," : ""
-
-    let reactionColumns: String
-    if includeReactionColumns {
-      reactionColumns = "guid TEXT, associated_message_guid TEXT, associated_message_type INTEGER,"
-    } else {
-      reactionColumns = ""
-    }
-
-    try db.execute(
-      """
-      CREATE TABLE message (
-        ROWID INTEGER PRIMARY KEY,
-        handle_id INTEGER,
-        text TEXT,
-        \(attributedBodyColumn)
-        \(reactionColumns)
-        date INTEGER,
-        is_from_me INTEGER,
-        service TEXT
-      );
-      """
-    )
-    try db.execute(
-      """
-      CREATE TABLE chat (
-        ROWID INTEGER PRIMARY KEY,
-        chat_identifier TEXT,
-        guid TEXT,
-        display_name TEXT,
-        service_name TEXT,
-        account_id TEXT,
-        account_login TEXT,
-        last_addressed_handle TEXT
-      );
-      """
-    )
-    try db.execute("CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT);")
-    try db.execute("CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER);")
-    try db.execute("CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);")
-    try db.execute(
-      """
-      CREATE TABLE attachment (
-        ROWID INTEGER PRIMARY KEY,
-        filename TEXT,
-        transfer_name TEXT,
-        uti TEXT,
-        mime_type TEXT,
-        total_bytes INTEGER,
-        is_sticker INTEGER
-      );
-      """
-    )
-    try db.execute(
-      """
-      CREATE TABLE message_attachment_join (
-        message_id INTEGER,
-        attachment_id INTEGER
-      );
-      """
+    try MessageDatabaseFixture.createSchema(
+      db,
+      options: MessageDatabaseFixture.SchemaOptions(
+        includeAttributedBody: includeAttributedBody,
+        includeReactionColumns: includeReactionColumns
+      )
     )
 
     let now = Date()

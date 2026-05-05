@@ -1,21 +1,34 @@
 import Foundation
 import SQLite
 
-extension MessageStore {
-  public func listChats(limit: Int) throws -> [Chat] {
-    let accountIDColumn = schema.hasChatAccountIDColumn ? "IFNULL(c.account_id, '')" : "''"
-    let accountLoginColumn = schema.hasChatAccountLoginColumn ? "IFNULL(c.account_login, '')" : "''"
-    let lastAddressedHandleColumn =
+private struct ChatRoutingSelection {
+  let accountIDColumn: String
+  let accountLoginColumn: String
+  let lastAddressedHandleColumn: String
+
+  init(schema: MessageStoreSchema) {
+    self.accountIDColumn = schema.hasChatAccountIDColumn ? "IFNULL(c.account_id, '')" : "''"
+    self.accountLoginColumn =
+      schema.hasChatAccountLoginColumn ? "IFNULL(c.account_login, '')" : "''"
+    self.lastAddressedHandleColumn =
       schema.hasChatLastAddressedHandleColumn ? "IFNULL(c.last_addressed_handle, '')" : "''"
-    let sql: String
+  }
+}
+
+private struct ListChatsQuery {
+  let sql: String
+  let bindings: [Binding?]
+
+  init(limit: Int, schema: MessageStoreSchema) {
+    let routing = ChatRoutingSelection(schema: schema)
     if schema.hasChatMessageJoinMessageDateColumn {
-      sql = """
+      self.sql = """
         SELECT c.ROWID AS chat_rowid, IFNULL(c.display_name, c.chat_identifier) AS name,
                c.chat_identifier AS chat_identifier, c.service_name AS service_name,
                MAX(cmj.message_date) AS last_date,
-               \(accountIDColumn) AS account_id,
-               \(accountLoginColumn) AS account_login,
-               \(lastAddressedHandleColumn) AS last_addressed_handle
+               \(routing.accountIDColumn) AS account_id,
+               \(routing.accountLoginColumn) AS account_login,
+               \(routing.lastAddressedHandleColumn) AS last_addressed_handle
         FROM chat c
         JOIN chat_message_join cmj ON c.ROWID = cmj.chat_id
         GROUP BY c.ROWID
@@ -23,13 +36,13 @@ extension MessageStore {
         LIMIT ?
         """
     } else {
-      sql = """
+      self.sql = """
         SELECT c.ROWID AS chat_rowid, IFNULL(c.display_name, c.chat_identifier) AS name,
                c.chat_identifier AS chat_identifier, c.service_name AS service_name,
                MAX(m.date) AS last_date,
-               \(accountIDColumn) AS account_id,
-               \(accountLoginColumn) AS account_login,
-               \(lastAddressedHandleColumn) AS last_addressed_handle
+               \(routing.accountIDColumn) AS account_id,
+               \(routing.accountLoginColumn) AS account_login,
+               \(routing.lastAddressedHandleColumn) AS last_addressed_handle
         FROM chat c
         JOIN chat_message_join cmj ON c.ROWID = cmj.chat_id
         JOIN message m ON m.ROWID = cmj.message_id
@@ -38,9 +51,51 @@ extension MessageStore {
         LIMIT ?
         """
     }
+    self.bindings = [limit]
+  }
+}
+
+private struct ChatInfoQuery {
+  let sql: String
+  let bindings: [Binding?]
+
+  init(chatID: ChatID, schema: MessageStoreSchema) {
+    let routing = ChatRoutingSelection(schema: schema)
+    self.sql = """
+      SELECT c.ROWID AS chat_rowid, IFNULL(c.chat_identifier, '') AS identifier, IFNULL(c.guid, '') AS guid,
+             IFNULL(c.display_name, c.chat_identifier) AS name, IFNULL(c.service_name, '') AS service,
+             \(routing.accountIDColumn) AS account_id,
+             \(routing.accountLoginColumn) AS account_login,
+             \(routing.lastAddressedHandleColumn) AS last_addressed_handle
+      FROM chat c
+      WHERE c.ROWID = ?
+      LIMIT 1
+      """
+    self.bindings = [chatID.rawValue]
+  }
+}
+
+private struct ParticipantsQuery {
+  let sql = """
+    SELECT h.id
+    FROM chat_handle_join chj
+    JOIN handle h ON h.ROWID = chj.handle_id
+    WHERE chj.chat_id = ?
+    ORDER BY h.id ASC
+    """
+  let bindings: [Binding?]
+
+  init(chatID: ChatID) {
+    self.bindings = [chatID.rawValue]
+  }
+}
+
+extension MessageStore {
+  public func listChats(limit: Int) throws -> [Chat] {
+    let query = ListChatsQuery(limit: limit, schema: schema)
     return try withConnection { db in
       var chats: [Chat] = []
-      let rows = try db.prepareRowIterator(sql, bindings: [limit])
+      let rows = try db.prepareRowIterator(query.sql, bindings: query.bindings)
       while let row = try rows.failableNext() {
         chats.append(
           Chat(
@@ -59,22 +114,9 @@ extension MessageStore {
   }
 
   public func chatInfo(chatID: Int64) throws -> ChatInfo? {
-    let accountIDColumn = schema.hasChatAccountIDColumn ? "IFNULL(c.account_id, '')" : "''"
-    let accountLoginColumn = schema.hasChatAccountLoginColumn ? "IFNULL(c.account_login, '')" : "''"
-    let lastAddressedHandleColumn =
-      schema.hasChatLastAddressedHandleColumn ? "IFNULL(c.last_addressed_handle, '')" : "''"
-    let sql = """
-      SELECT c.ROWID AS chat_rowid, IFNULL(c.chat_identifier, '') AS identifier, IFNULL(c.guid, '') AS guid,
-             IFNULL(c.display_name, c.chat_identifier) AS name, IFNULL(c.service_name, '') AS service,
-             \(accountIDColumn) AS account_id,
-             \(accountLoginColumn) AS account_login,
-             \(lastAddressedHandleColumn) AS last_addressed_handle
-      FROM chat c
-      WHERE c.ROWID = ?
-      LIMIT 1
-      """
+    let query = ChatInfoQuery(chatID: ChatID(rawValue: chatID), schema: schema)
     return try withConnection { db in
-      let rows = try db.prepareRowIterator(sql, bindings: [chatID])
+      let rows = try db.prepareRowIterator(query.sql, bindings: query.bindings)
       while let row = try rows.failableNext() {
         return ChatInfo(
           id: try int64Value(row, "chat_rowid") ?? 0,
@@ -92,17 +134,11 @@ extension MessageStore {
   }
 
   public func participants(chatID: Int64) throws -> [String] {
-    let sql = """
-      SELECT h.id
-      FROM chat_handle_join chj
-      JOIN handle h ON h.ROWID = chj.handle_id
-      WHERE chj.chat_id = ?
-      ORDER BY h.id ASC
-      """
+    let query = ParticipantsQuery(chatID: ChatID(rawValue: chatID))
     return try withConnection { db in
       var results: [String] = []
       var seen = Set<String>()
-      let rows = try db.prepareRowIterator(sql, bindings: [chatID])
+      let rows = try db.prepareRowIterator(query.sql, bindings: query.bindings)
       while let row = try rows.failableNext() {
         let handle = try stringValue(row, "id")
         if handle.isEmpty { continue }
