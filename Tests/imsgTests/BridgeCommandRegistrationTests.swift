@@ -43,6 +43,24 @@ func bridgeMessagingCommandsExposeChatRequirement() async {
 }
 
 @Test
+func bridgeAttachmentStagingUsesChatGuid() throws {
+  let testFile = URL(fileURLWithPath: #filePath)
+  let repoRoot =
+    testFile
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+  let helper = repoRoot.appendingPathComponent("Sources/IMsgHelper/IMsgInjected.m")
+  let source = try String(contentsOf: helper, encoding: .utf8)
+
+  #expect(source.contains("NSString *chatGuid, NSString **outErr)"))
+  #expect(source.contains("[inv setArgument:&cg atIndex:5];"))
+  #expect(
+    source.contains("saveAttachmentsForTransfer:chatGUID:storeAtExternalLocation:completion:"))
+  #expect(source.contains("prepareOutgoingTransfer(fileURL, filename, chatGuid, &prepErr)"))
+}
+
+@Test
 func chatMarkRejectsConflictingFlags() async {
   let router = CommandRouter()
   let (output, status) = await StdoutCapture.capture {

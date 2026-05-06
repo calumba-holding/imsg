@@ -1866,8 +1866,83 @@ static NSAttributedString *buildAttachmentAttributed(NSString *transferGuid,
 ///      the persistent copy.
 ///   5. `registerTransferWithDaemon:` so the daemon picks it up.
 /// On failure returns `nil`; the caller emits the error.
+static void retargetPreparedTransfer(id ftc, IMFileTransfer *transfer,
+                                     NSString *transferGuid, NSString *path) {
+    if (!path.length) return;
+    if ([ftc respondsToSelector:@selector(retargetTransfer:toPath:)]) {
+        NSMethodSignature *rsig = [ftc methodSignatureForSelector:
+            @selector(retargetTransfer:toPath:)];
+        NSInvocation *rinv = [NSInvocation invocationWithMethodSignature:rsig];
+        [rinv setSelector:@selector(retargetTransfer:toPath:)];
+        [rinv setTarget:ftc];
+        __unsafe_unretained NSString *g = transferGuid;
+        __unsafe_unretained NSString *p = path;
+        [rinv setArgument:&g atIndex:2];
+        [rinv setArgument:&p atIndex:3];
+        [rinv invoke];
+    }
+    if ([transfer respondsToSelector:@selector(setLocalURL:)]) {
+        [transfer performSelector:@selector(setLocalURL:)
+                       withObject:[NSURL fileURLWithPath:path]];
+    }
+}
+
+static NSString *saveAttachmentForTransfer(id pac, IMFileTransfer *transfer,
+                                           NSString *chatGuid, NSString **outErr) {
+    SEL saveSel = @selector(saveAttachmentsForTransfer:chatGUID:storeAtExternalLocation:completion:);
+    if (!pac || ![pac respondsToSelector:saveSel]) {
+        return nil;
+    }
+
+    __block BOOL done = NO;
+    __block NSString *savedPath = nil;
+    __block id saveError = nil;
+    void (^completion)(id, id, id) = ^(id primaryPath, id error, id externalPath) {
+        if ([primaryPath isKindOfClass:[NSString class]] && [(NSString *)primaryPath length]) {
+            savedPath = primaryPath;
+        } else if ([externalPath isKindOfClass:[NSString class]]
+                   && [(NSString *)externalPath length]) {
+            savedPath = externalPath;
+        }
+        saveError = error;
+        done = YES;
+    };
+
+    NSMethodSignature *sig = [pac methodSignatureForSelector:saveSel];
+    NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+    [inv setSelector:saveSel];
+    [inv setTarget:pac];
+    __unsafe_unretained IMFileTransfer *xfer = transfer;
+    __unsafe_unretained NSString *cg = chatGuid;
+    BOOL external = chatGuid.length > 0;
+    [inv setArgument:&xfer atIndex:2];
+    [inv setArgument:&cg atIndex:3];
+    [inv setArgument:&external atIndex:4];
+    [inv setArgument:&completion atIndex:5];
+    [inv retainArguments];
+    [inv invoke];
+
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:3.0];
+    while (!done && [deadline timeIntervalSinceNow] > 0) {
+        [[NSRunLoop currentRunLoop]
+            runMode:NSDefaultRunLoopMode
+         beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+    }
+
+    debugLog(@"prepareOutgoingTransfer: saveAttachments path=%@ error=%@ done=%d",
+             savedPath ?: @"(nil)", saveError ?: @"(nil)", done);
+    if (!done) {
+        if (outErr) *outErr = @"Timed out staging attachment";
+        return nil;
+    }
+    if (saveError && outErr) {
+        *outErr = [NSString stringWithFormat:@"Failed to stage attachment: %@", saveError];
+    }
+    return savedPath;
+}
+
 static IMFileTransfer *prepareOutgoingTransfer(NSURL *originalURL, NSString *filename,
-                                               NSString **outErr) {
+                                               NSString *chatGuid, NSString **outErr) {
     Class ftcClass = NSClassFromString(@"IMFileTransferCenter");
     if (!ftcClass) {
         if (outErr) *outErr = @"IMFileTransferCenter not available";
@@ -1915,13 +1990,13 @@ static IMFileTransfer *prepareOutgoingTransfer(NSURL *originalURL, NSString *fil
             [inv setTarget:pac];
             __unsafe_unretained IMFileTransfer *xfer = transfer;
             __unsafe_unretained NSString *fn = filename ?: [originalURL lastPathComponent];
-            __unsafe_unretained NSString *nilGuid = nil;
+            __unsafe_unretained NSString *cg = chatGuid;
             BOOL hi = YES;
             BOOL ext = YES;
             [inv setArgument:&xfer atIndex:2];
             [inv setArgument:&fn atIndex:3];
             [inv setArgument:&hi atIndex:4];
-            [inv setArgument:&nilGuid atIndex:5];
+            [inv setArgument:&cg atIndex:5];
             [inv setArgument:&ext atIndex:6];
             [inv retainArguments];
             [inv invoke];
@@ -1960,20 +2035,14 @@ static IMFileTransfer *prepareOutgoingTransfer(NSURL *originalURL, NSString *fil
                         @"Failed to copy attachment: %@", copyErr.localizedDescription];
                     return nil;
                 }
-                if ([ftc respondsToSelector:@selector(retargetTransfer:toPath:)]) {
-                    NSMethodSignature *rsig = [ftc methodSignatureForSelector:
-                        @selector(retargetTransfer:toPath:)];
-                    NSInvocation *rinv = [NSInvocation invocationWithMethodSignature:rsig];
-                    [rinv setSelector:@selector(retargetTransfer:toPath:)];
-                    [rinv setTarget:ftc];
-                    __unsafe_unretained NSString *g = transferGuid;
-                    __unsafe_unretained NSString *p = persistentPath;
-                    [rinv setArgument:&g atIndex:2];
-                    [rinv setArgument:&p atIndex:3];
-                    [rinv invoke];
-                }
-                if ([transfer respondsToSelector:@selector(setLocalURL:)]) {
-                    [transfer performSelector:@selector(setLocalURL:) withObject:persistentURL];
+                retargetPreparedTransfer(ftc, transfer, transferGuid, persistentPath);
+            } else {
+                NSString *savedPath = saveAttachmentForTransfer(pac, transfer, chatGuid, outErr);
+                if (savedPath.length) {
+                    retargetPreparedTransfer(ftc, transfer, transferGuid, savedPath);
+                } else if (outErr && !*outErr) {
+                    *outErr = @"Could not stage attachment";
+                    return nil;
                 }
             }
         }
@@ -2029,7 +2098,7 @@ static NSDictionary *handleSendAttachment(NSInteger requestId, NSDictionary *par
 
     @try {
         NSString *prepErr = nil;
-        IMFileTransfer *transfer = prepareOutgoingTransfer(fileURL, filename, &prepErr);
+        IMFileTransfer *transfer = prepareOutgoingTransfer(fileURL, filename, chatGuid, &prepErr);
         if (!transfer) {
             return errorResponse(requestId,
                 prepErr.length ? prepErr : @"Could not register attachment transfer");
@@ -2675,7 +2744,7 @@ static NSDictionary *handleUpdateGroupPhoto(NSInteger requestId, NSDictionary *p
         NSURL *fileURL = [NSURL fileURLWithPath:filePath];
         NSString *prepErr = nil;
         IMFileTransfer *transfer = prepareOutgoingTransfer(fileURL,
-            [fileURL lastPathComponent], &prepErr);
+            [fileURL lastPathComponent], chatGuid, &prepErr);
         if (!transfer || ![transfer guid].length) {
             return errorResponse(requestId,
                 prepErr.length ? prepErr : @"Could not prepare group-photo transfer");

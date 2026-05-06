@@ -6,6 +6,9 @@
 - fix: restore macOS 26 bridge sends, replies, tapbacks, typing/read RPC, and
   chat/group lifecycle RPC methods after the BlueBubbles-inspired bridge port
   regressed on Tahoe (#101, thanks @omarshahine).
+- fix: stage bridge attachments with the target chat GUID and fall back to the
+  modern IMDPersistence save API when the legacy persistent-path API returns
+  nil (#102, #103, thanks @omarshahine).
 
 ### Security
 - fix: harden bridge IPC queue directories and attachment paths against
