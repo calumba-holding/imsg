@@ -1859,16 +1859,17 @@ static NSAttributedString *buildAttachmentAttributed(NSString *transferGuid,
 /// outbound message. Mirrors BlueBubblesHelper's `prepareFileTransferForAttachment`:
 ///   1. Allocate a guid via `guidForNewOutgoingTransferWithLocalURL:`.
 ///   2. Resolve the resulting `IMFileTransfer` via `transferForGUID:`.
-///   3. Ask `IMDPersistentAttachmentController` for the canonical attachment
-///      path and copy the source file there (Messages will only register
-///      transfers whose backing file lives in its container).
+///   3. Stage the source file in the IMD-managed attachments tree.
 ///   4. `retargetTransfer:toPath:` + `setLocalURL:` to point the transfer at
-///      the persistent copy.
+///      the staged copy.
 ///   5. `registerTransferWithDaemon:` so the daemon picks it up.
 /// On failure returns `nil`; the caller emits the error.
 static void retargetPreparedTransfer(id ftc, IMFileTransfer *transfer,
                                      NSString *transferGuid, NSString *path) {
     if (!path.length) return;
+    // Updating only `localURL` is not enough: IMFileTransferCenter keeps its
+    // own guid -> path map, and imagent reads that map when daemon registration
+    // happens.
     if ([ftc respondsToSelector:@selector(retargetTransfer:toPath:)]) {
         NSMethodSignature *rsig = [ftc methodSignatureForSelector:
             @selector(retargetTransfer:toPath:)];
@@ -1897,6 +1898,9 @@ static NSString *saveAttachmentForTransfer(id pac, IMFileTransfer *transfer,
     __block BOOL done = NO;
     __block NSString *savedPath = nil;
     __block id saveError = nil;
+    // Runtime probe on macOS 26 shows the completion receives:
+    //   primaryPath, error, externalPath
+    // `externalPath` is only populated when `storeAtExternalLocation:YES`.
     void (^completion)(id, id, id) = ^(id primaryPath, id error, id externalPath) {
         if ([primaryPath isKindOfClass:[NSString class]] && [(NSString *)primaryPath length]) {
             savedPath = primaryPath;
@@ -1915,6 +1919,8 @@ static NSString *saveAttachmentForTransfer(id pac, IMFileTransfer *transfer,
     __unsafe_unretained IMFileTransfer *xfer = transfer;
     __unsafe_unretained NSString *cg = chatGuid;
     BOOL external = chatGuid.length > 0;
+    // Call via NSInvocation because this private selector and block signature
+    // are absent from public SDK headers.
     [inv setArgument:&xfer atIndex:2];
     [inv setArgument:&cg atIndex:3];
     [inv setArgument:&external atIndex:4];
@@ -1922,6 +1928,8 @@ static NSString *saveAttachmentForTransfer(id pac, IMFileTransfer *transfer,
     [inv retainArguments];
     [inv invoke];
 
+    // The completion is usually synchronous, but keep the same bounded run-loop
+    // pump used by other bridge helpers in case IMDPersistence hops queues.
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:3.0];
     while (!done && [deadline timeIntervalSinceNow] > 0) {
         [[NSRunLoop currentRunLoop]
@@ -1976,9 +1984,9 @@ static IMFileTransfer *prepareOutgoingTransfer(NSURL *originalURL, NSString *fil
     }
 
     // Try to copy the source file into the IMD-managed attachments tree and
-    // retarget the transfer. If the persistent-path API isn't available (older
-    // macOS), fall back to registering the transfer as-is — the daemon may
-    // still accept a path under a permissive location.
+    // retarget the transfer. macOS 26 returns nil here if `chatGUID` is nil;
+    // passing the real chat GUID is what gives IMD enough context to choose the
+    // per-chat attachment-store path that Messages/imagent will accept.
     Class pacClass = NSClassFromString(@"IMDPersistentAttachmentController");
     if (pacClass) {
         id pac = [pacClass performSelector:@selector(sharedInstance)];
@@ -2037,6 +2045,9 @@ static IMFileTransfer *prepareOutgoingTransfer(NSURL *originalURL, NSString *fil
                 }
                 retargetPreparedTransfer(ftc, transfer, transferGuid, persistentPath);
             } else {
+                // Newer IMDPersistence builds also expose a block-based save
+                // API. Use it as a fallback when the older path helper refuses
+                // to return a staging path for this transfer.
                 NSString *savedPath = saveAttachmentForTransfer(pac, transfer, chatGuid, outErr);
                 if (savedPath.length) {
                     retargetPreparedTransfer(ftc, transfer, transferGuid, savedPath);
