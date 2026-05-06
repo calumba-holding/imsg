@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-## 0.7.2 - Unreleased
+## 0.7.2 - 2026-05-06
+
+### Release Packaging
+- fix: publish a fresh signed and notarized macOS patch archive with matching
+  Homebrew metadata.
 
 ## 0.7.1 - 2026-05-06
 
