@@ -27,6 +27,25 @@ public final class MessagesLauncher: @unchecked Sendable {
     NSHomeDirectory() + "/Library/Containers/com.apple.MobileSMS/Data"
   }
 
+  /// Inbox directory for v2 RPC requests (`<uuid>.json` files dropped here by
+  /// the CLI; consumed by the dylib).
+  public var bridgeInboxDirectory: String {
+    containerPath + "/" + IMsgBridgeProtocol.rpcDirectoryName + "/"
+      + IMsgBridgeProtocol.inboxDirectoryName
+  }
+
+  /// Outbox directory for v2 RPC responses (`<uuid>.json` files written by
+  /// the dylib; consumed by the CLI).
+  public var bridgeOutboxDirectory: String {
+    containerPath + "/" + IMsgBridgeProtocol.rpcDirectoryName + "/"
+      + IMsgBridgeProtocol.outboxDirectoryName
+  }
+
+  /// Path to the dylib's append-only event log.
+  public var bridgeEventsFile: String {
+    containerPath + "/" + IMsgBridgeProtocol.eventsFileName
+  }
+
   private let messagesAppPath =
     "/System/Applications/Messages.app/Contents/MacOS/Messages"
   private let queue = DispatchQueue(label: "imsg.messages.launcher")
@@ -49,9 +68,14 @@ public final class MessagesLauncher: @unchecked Sendable {
     }
   }
 
+  /// Check if Messages.app has published the bridge-ready lock file.
+  public func hasReadyLockFile() -> Bool {
+    FileManager.default.fileExists(atPath: lockFile)
+  }
+
   /// Check if Messages.app is running with our dylib (lock file exists and responds to ping).
   public func isInjectedAndReady() -> Bool {
-    guard FileManager.default.fileExists(atPath: lockFile) else {
+    guard hasReadyLockFile() else {
       return false
     }
     do {
@@ -65,7 +89,16 @@ public final class MessagesLauncher: @unchecked Sendable {
   /// Ensure Messages.app is running with our dylib injected.
   public func ensureRunning() throws {
     if isInjectedAndReady() { return }
+    try launchInjectedMessages()
+  }
 
+  /// Ensure Messages.app is launched with the helper without touching legacy IPC.
+  public func ensureLaunched() throws {
+    if hasReadyLockFile() { return }
+    try launchInjectedMessages()
+  }
+
+  private func launchInjectedMessages() throws {
     switch Self.currentSIPStatus() {
     case .disabled:
       break
@@ -87,8 +120,26 @@ public final class MessagesLauncher: @unchecked Sendable {
     try? FileManager.default.removeItem(atPath: responseFile)
     try? FileManager.default.removeItem(atPath: lockFile)
 
+    // Pre-create v2 RPC queue directories so the dylib can FSEvent-watch them
+    // immediately on startup (FSEventStream registration on a missing path
+    // silently fails to deliver events).
+    try? FileManager.default.createDirectory(
+      atPath: bridgeInboxDirectory, withIntermediateDirectories: true)
+    try? FileManager.default.createDirectory(
+      atPath: bridgeOutboxDirectory, withIntermediateDirectories: true)
+    cleanQueueDirectory(bridgeInboxDirectory)
+    cleanQueueDirectory(bridgeOutboxDirectory)
+
     try launchWithInjection()
     try waitForReady(timeout: 15.0)
+  }
+
+  private func cleanQueueDirectory(_ path: String) {
+    guard let entries = try? FileManager.default.contentsOfDirectory(atPath: path)
+    else { return }
+    for entry in entries {
+      try? FileManager.default.removeItem(atPath: (path as NSString).appendingPathComponent(entry))
+    }
   }
 
   /// Kill Messages.app if running.
