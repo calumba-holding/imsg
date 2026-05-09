@@ -36,6 +36,16 @@ imsg history --chat-id ID --json | jq -s
 
 Use `imsg search --query ... --json` for message-body search only; do not treat no search hits as proof that a visible UI contact does not exist. Use `--attachments` when attachment metadata matters. Use `--start`/`--end` with absolute timestamps for date-scoped questions.
 
+Useful current commands:
+
+```bash
+imsg search --query "pizza tonight" --match contains --json | jq -s
+imsg status --json
+imsg account --json
+imsg whois --address "+15551234567" --type phone --json
+imsg nickname --address "+15551234567" --json
+```
+
 Direct DB checks are only a fallback. The `handle` table is keyed by phone/email and often lacks the contact display name that `imsg chats` resolves.
 
 ## Sends
