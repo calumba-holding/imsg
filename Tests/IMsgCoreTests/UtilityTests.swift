@@ -62,6 +62,53 @@ func attachmentResolverReportsCachedConvertedCAF() throws {
 }
 
 @Test
+func attachmentResolverConversionDoesNotBlockOnConverterOutput() throws {
+  let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  let source = dir.appendingPathComponent("voice.caf")
+  try Data("caf".utf8).write(to: source)
+  let converted = AttachmentResolver.convertedURL(for: source.path, targetExtension: "m4a")
+  try? FileManager.default.removeItem(at: converted)
+  defer { try? FileManager.default.removeItem(at: converted) }
+
+  let fakeFFmpeg = dir.appendingPathComponent("ffmpeg")
+  try """
+  #!/bin/sh
+  last=""
+  for arg in "$@"; do
+    last="$arg"
+  done
+  i=0
+  while [ "$i" -lt 2048 ]; do
+    printf '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\\n' >&2
+    i=$((i + 1))
+  done
+  printf converted > "$last"
+  exit 0
+  """.write(to: fakeFFmpeg, atomically: true, encoding: .utf8)
+  try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeFFmpeg.path)
+
+  let oldPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
+  setenv("PATH", "\(dir.path):\(oldPath)", 1)
+  defer { setenv("PATH", oldPath, 1) }
+
+  let meta = AttachmentResolver.metadata(
+    filename: source.path,
+    transferName: "voice.caf",
+    uti: "com.apple.coreaudio-format",
+    mimeType: "audio/x-caf",
+    totalBytes: 3,
+    isSticker: false,
+    options: AttachmentQueryOptions(convertUnsupported: true)
+  )
+
+  #expect(meta.convertedPath == converted.path)
+  #expect(meta.convertedMimeType == "audio/mp4")
+}
+
+@Test
 func attachmentResolverLeavesUnsupportedFilesUnconverted() throws {
   let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
   try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

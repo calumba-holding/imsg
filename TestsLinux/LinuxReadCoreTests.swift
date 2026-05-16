@@ -7,6 +7,7 @@ import Testing
 @Test
 func readsMessageDatabaseFromCopiedFile() throws {
   let databaseURL = try makeTemporaryDatabase()
+  defer { try? FileManager.default.removeItem(at: databaseURL.deletingLastPathComponent()) }
   try seedDatabase(at: databaseURL)
 
   let store = try MessageStore(path: databaseURL.path)

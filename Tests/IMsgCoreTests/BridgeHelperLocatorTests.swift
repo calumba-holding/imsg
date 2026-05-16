@@ -10,12 +10,16 @@ func bridgeHelperLocatorIncludesHomebrewAndSourcePaths() {
     environment: ["HOMEBREW_PREFIX": "/custom/brew"]
   )
 
-  #expect(paths.contains("/opt/homebrew/Cellar/imsg/1.2.3/lib/imsg-bridge-helper.dylib"))
-  #expect(paths.contains("/custom/brew/lib/imsg-bridge-helper.dylib"))
-  #expect(paths.contains("/opt/homebrew/lib/imsg-bridge-helper.dylib"))
-  #expect(paths.contains("/usr/local/lib/imsg-bridge-helper.dylib"))
-  #expect(paths.contains(".build/release/imsg-bridge-helper.dylib"))
-  #expect(paths.contains(".build/debug/imsg-bridge-helper.dylib"))
+  #expect(
+    paths == [
+      "/opt/homebrew/Cellar/imsg/1.2.3/libexec/imsg-bridge-helper.dylib",
+      "/opt/homebrew/Cellar/imsg/1.2.3/lib/imsg-bridge-helper.dylib",
+      "/custom/brew/lib/imsg-bridge-helper.dylib",
+      "/opt/homebrew/lib/imsg-bridge-helper.dylib",
+      "/usr/local/lib/imsg-bridge-helper.dylib",
+      ".build/release/imsg-bridge-helper.dylib",
+      ".build/debug/imsg-bridge-helper.dylib",
+    ])
 }
 
 @Test

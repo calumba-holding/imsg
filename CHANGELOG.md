@@ -22,6 +22,9 @@
   the backing `IMMessageItem` and attributed compatibility text to IMCore (#116,
   thanks @zshawauxlol).
 
+### Attachments
+- fix: avoid hanging attachment metadata conversion when `ffmpeg` emits enough output to fill stdout or stderr pipes.
+
 ## 0.8.2 - 2026-05-11
 
 ### JSON-RPC

@@ -98,16 +98,12 @@ enum AttachmentResolver {
 
     let temporaryURL = outputURL.deletingLastPathComponent()
       .appendingPathComponent(".\(UUID().uuidString).\(plan.targetExtension)")
-    let process = Process()
-    process.executableURL = ffmpegURL
-    process.arguments = plan.arguments(path, temporaryURL.path)
-    process.standardOutput = Pipe()
-    process.standardError = Pipe()
-
     do {
-      try process.run()
-      process.waitUntilExit()
-      guard process.terminationStatus == 0,
+      let status = try runConversionProcess(
+        executableURL: ffmpegURL,
+        arguments: plan.arguments(path, temporaryURL.path)
+      )
+      guard status == 0,
         FileManager.default.fileExists(atPath: temporaryURL.path)
       else {
         try? FileManager.default.removeItem(at: temporaryURL)
@@ -120,6 +116,18 @@ enum AttachmentResolver {
       try? FileManager.default.removeItem(at: temporaryURL)
       return nil
     }
+  }
+
+  static func runConversionProcess(executableURL: URL, arguments: [String]) throws -> Int32 {
+    let process = Process()
+    process.executableURL = executableURL
+    process.arguments = arguments
+    process.standardOutput = FileHandle(forWritingAtPath: "/dev/null")
+    process.standardError = FileHandle(forWritingAtPath: "/dev/null")
+
+    try process.run()
+    process.waitUntilExit()
+    return process.terminationStatus
   }
 
   private static func conversionPlan(

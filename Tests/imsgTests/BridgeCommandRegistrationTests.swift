@@ -33,12 +33,19 @@ func bridgeMessagingCommandsExposeChatRequirement() async {
   // up as a parse-time error rather than dropping into the bridge with empty
   // strings.
   let router = CommandRouter()
-  let names = ["send-rich", "edit", "unsend", "delete-message", "tapback"]
-  for name in names {
-    let (_, status) = await StdoutCapture.capture {
-      await router.run(argv: ["imsg", name])
+  let cases: [(name: String, args: [String])] = [
+    ("send-rich", ["--text", "hello"]),
+    ("edit", ["--message", "message-guid", "--new-text", "updated"]),
+    ("unsend", ["--message", "message-guid"]),
+    ("delete-message", ["--message", "message-guid"]),
+    ("tapback", ["--message", "message-guid", "--kind", "love"]),
+  ]
+  for testCase in cases {
+    let (output, status) = await StdoutCapture.capture {
+      await router.run(argv: ["imsg", testCase.name] + testCase.args)
     }
-    #expect(status == 1, "\(name) should have required missing args")
+    #expect(status == 1, "\(testCase.name) should require --chat")
+    #expect(output.contains("Missing required option: --chat"))
   }
 }
 
@@ -51,13 +58,57 @@ func bridgeAttachmentStagingUsesChatGuid() throws {
     .deletingLastPathComponent()
     .deletingLastPathComponent()
   let helper = repoRoot.appendingPathComponent("Sources/IMsgHelper/IMsgInjected.m")
-  let source = try String(contentsOf: helper, encoding: .utf8)
+  let source = stripObjectiveCComments(try String(contentsOf: helper, encoding: .utf8))
+  let prepareBody = try #require(
+    functionBody(
+      named: "prepareOutgoingTransfer",
+      in: source
+    ))
+  let sendAttachmentBody = try #require(
+    functionBody(
+      named: "handleSendAttachment",
+      in: source
+    ))
 
-  #expect(source.contains("NSString *chatGuid, NSString **outErr)"))
-  #expect(source.contains("[inv setArgument:&cg atIndex:5];"))
   #expect(
-    source.contains("saveAttachmentsForTransfer:chatGUID:storeAtExternalLocation:completion:"))
-  #expect(source.contains("prepareOutgoingTransfer(fileURL, filename, chatGuid, &prepErr)"))
+    source.range(
+      of: #"prepareOutgoingTransfer\s*\([^)]*NSString\s*\*chatGuid\s*,\s*NSString\s*\*\*outErr\)"#,
+      options: .regularExpression
+    ) != nil)
+  #expect(
+    prepareBody.contains(
+      "_persistentPathForTransfer:filename:highQuality:chatGUID:storeAtExternalPath:"))
+  #expect(prepareBody.contains("[inv setArgument:&cg atIndex:5];"))
+  #expect(
+    sendAttachmentBody.contains("prepareOutgoingTransfer(fileURL, filename, chatGuid, &prepErr)"))
+}
+
+private func stripObjectiveCComments(_ source: String) -> String {
+  source
+    .replacingOccurrences(of: #"/\*[\s\S]*?\*/"#, with: "", options: .regularExpression)
+    .replacingOccurrences(of: #"//.*"#, with: "", options: .regularExpression)
+}
+
+private func functionBody(named name: String, in source: String) -> String? {
+  guard let nameRange = source.range(of: name),
+    let openBrace = source[nameRange.upperBound...].firstIndex(of: "{")
+  else {
+    return nil
+  }
+  var depth = 0
+  var index = openBrace
+  while index < source.endIndex {
+    if source[index] == "{" {
+      depth += 1
+    } else if source[index] == "}" {
+      depth -= 1
+      if depth == 0 {
+        return String(source[openBrace...index])
+      }
+    }
+    index = source.index(after: index)
+  }
+  return nil
 }
 
 @Test
