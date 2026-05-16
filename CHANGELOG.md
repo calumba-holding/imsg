@@ -8,12 +8,19 @@
   the parent of a threaded reply (or non-reaction association) without a
   follow-up chat.db lookup. The parent is resolved by joining
   `thread_originator_guid` or the non-reaction `associated_message_guid`
-  back to the message table; absent parents leave the fields nil.
+  back to the message table; absent parents leave the fields nil (#115, thanks
+  @omarshahine).
+
+### JSON-RPC
+- feat: expose bridge-backed message RPC methods for rich sends, attachments, tapbacks, edits, unsends, deletes, and notify-anyways; include the CLI version in `imsg status --json` so callers can gate newer RPC action surfaces.
 
 ### Private API Bridge
 - fix: support threaded attachment replies via `send-rich --file` and
   `send-attachment --reply-to`, including the macOS 26 attachment staging
   fallback (#113, #114, thanks @omarshahine).
+- fix: `edit` now applies on macOS 14+ instead of silently no-opping by passing
+  the backing `IMMessageItem` and attributed compatibility text to IMCore (#116,
+  thanks @zshawauxlol).
 
 ## 0.8.2 - 2026-05-11
 

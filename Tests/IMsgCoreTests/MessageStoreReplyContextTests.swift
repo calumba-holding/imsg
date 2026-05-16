@@ -145,6 +145,48 @@ func messagesAfterEnrichesAssociatedReplyParent() throws {
 }
 
 @Test
+func threadOriginatorWinsWhenBothReplyReferencesExist() throws {
+  let db = try ReplyContextTestDatabase.makeConnection()
+  let now = Date()
+  try ReplyContextTestDatabase.insertMessage(
+    db,
+    rowID: 1,
+    handleID: 1,
+    text: "Associated parent",
+    guid: "associated-parent",
+    date: now.addingTimeInterval(-90)
+  )
+  try ReplyContextTestDatabase.insertMessage(
+    db,
+    rowID: 2,
+    handleID: 2,
+    text: "Thread parent",
+    guid: "thread-parent",
+    date: now.addingTimeInterval(-60)
+  )
+  try ReplyContextTestDatabase.insertMessage(
+    db,
+    rowID: 3,
+    handleID: 2,
+    text: "Reply",
+    guid: "reply-guid",
+    date: now,
+    associatedGuid: "p:0/associated-parent",
+    associatedType: 1,
+    threadOriginatorGuid: "thread-parent"
+  )
+
+  let store = try MessageStore(connection: db, path: ":memory:")
+  let messages = try store.messagesAfter(afterRowID: 0, chatID: 1, limit: 10)
+  let reply = try #require(messages.first { $0.rowID == 3 })
+
+  #expect(reply.replyToGUID == "associated-parent")
+  #expect(reply.threadOriginatorGUID == "thread-parent")
+  #expect(reply.replyToText == "Thread parent")
+  #expect(reply.replyToSender == "+456")
+}
+
+@Test
 func reactionsDoNotProduceReplyContext() throws {
   let db = try ReplyContextTestDatabase.makeConnection()
   let now = Date()

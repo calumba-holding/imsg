@@ -37,7 +37,7 @@ extension MessageStore {
     return (text: decoded.text, sender: decoded.sender)
   }
 
-  /// Walks `replyToGUID` then `threadOriginatorGUID` and returns the first
+  /// Walks `threadOriginatorGUID` then `replyToGUID` and returns the first
   /// successful parent resolution, consulting `cache` to amortize repeated
   /// lookups within one query loop. Lookup failures (absent parent, SQLite
   /// error) are swallowed and negatively memoized so a missing parent never
@@ -48,7 +48,7 @@ extension MessageStore {
     threadOriginatorGUID: String?,
     cache: inout ReplyParentCache
   ) -> ReplyParent? {
-    for candidate in [replyToGUID, threadOriginatorGUID] {
+    for candidate in [threadOriginatorGUID, replyToGUID] {
       guard let guid = candidate, !guid.isEmpty else { continue }
       if let cached = cache[guid] {
         if let parent = cached { return parent }
