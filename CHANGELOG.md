@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.3 - Unreleased
+## 0.9.0 - 2026-05-16
 
 ### JSON Output
 - feat: include `reply_to_text` and `reply_to_sender` on message payloads
