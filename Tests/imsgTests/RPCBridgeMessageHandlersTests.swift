@@ -60,6 +60,29 @@ func rpcSendRichInvokesBridgeWithResolvedChat() async throws {
 }
 
 @Test
+func rpcSendRichSuppressesQueuedBridgeGuid() async throws {
+  let store = try CommandTestDatabase.makeStoreForRPC()
+  let output = TestRPCOutput()
+  let server = RPCServer(
+    store: store,
+    verbose: false,
+    output: output,
+    invokeBridge: { _, _ in
+      ["messageGuid": "previous-guid", "queued": true]
+    }
+  )
+
+  await server.handleLineForTesting(
+    #"{"jsonrpc":"2.0","id":"rich","method":"send.rich","params":{"chat_id":1,"text":"boom"}}"#
+  )
+
+  let result = output.responses.first?["result"] as? [String: Any]
+  #expect(result?["queued"] as? Bool == true)
+  #expect(result?["guid"] == nil)
+  #expect(result?["message_id"] == nil)
+}
+
+@Test
 func rpcSendAttachmentStagesFileBeforeBridgeSend() async throws {
   let store = try CommandTestDatabase.makeStoreForRPC()
   let output = TestRPCOutput()
@@ -79,13 +102,15 @@ func rpcSendAttachmentStagesFileBeforeBridgeSend() async throws {
     }
   )
 
-  await server.handleLineForTesting(
-    #"{"jsonrpc":"2.0","id":"attachment","method":"send.attachment","params":{"chat_id":1,"file":"~/Desktop/file.png","audio":true}}"#
-  )
+  let line =
+    #"{"jsonrpc":"2.0","id":"attachment","method":"send.attachment","params":{"#
+    + #""chat_id":1,"file":"~/Desktop/file.png","audio":true,"reply_to":"parent-guid"}}"#
+  await server.handleLineForTesting(line)
 
   #expect(stagedInput?.hasSuffix("/Desktop/file.png") == true)
   #expect(capturedParams["filePath"] as? String == "/tmp/staged-file.png")
   #expect(capturedParams["isAudioMessage"] as? Bool == true)
+  #expect(capturedParams["selectedMessageGuid"] as? String == "parent-guid")
   let result = output.responses.first?["result"] as? [String: Any]
   #expect(result?["message_id"] as? String == "attachment-guid")
 }

@@ -30,7 +30,12 @@ extension RPCServer {
 
     let data = try await invokeBridge(action: .sendMessage, params: bridgeParams)
     var result: [String: Any] = ["ok": true]
-    if let guid = data["messageGuid"] as? String, !guid.isEmpty {
+    if let queued = data["queued"] as? Bool {
+      result["queued"] = queued
+    }
+    if data["queued"] as? Bool != true,
+      let guid = data["messageGuid"] as? String, !guid.isEmpty
+    {
       result["guid"] = guid
       result["message_id"] = guid
     }
@@ -42,15 +47,18 @@ extension RPCServer {
     guard let file = stringParam(params["file"] ?? params["path"]), !file.isEmpty else {
       throw RPCError.invalidParams("file is required")
     }
-    let data = try await invokeBridge(
-      action: .sendAttachment,
-      params: [
-        "chatGuid": chatGUID,
-        "filePath": try stageAttachment((file as NSString).expandingTildeInPath),
-        "isAudioMessage": boolParam(params["audio"] ?? params["is_audio"] ?? params["as_voice"])
-          ?? false,
-      ]
-    )
+    var bridgeParams: [String: Any] = [
+      "chatGuid": chatGUID,
+      "filePath": try stageAttachment((file as NSString).expandingTildeInPath),
+      "isAudioMessage": boolParam(params["audio"] ?? params["is_audio"] ?? params["as_voice"])
+        ?? false,
+    ]
+    if let reply = stringParam(
+      params["reply_to"] ?? params["replyTo"] ?? params["reply_to_guid"] ?? params["message_guid"]
+    ), !reply.isEmpty {
+      bridgeParams["selectedMessageGuid"] = reply
+    }
+    let data = try await invokeBridge(action: .sendAttachment, params: bridgeParams)
     var result: [String: Any] = ["ok": true]
     if let guid = data["messageGuid"] as? String, !guid.isEmpty {
       result["guid"] = guid

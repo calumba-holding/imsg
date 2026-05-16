@@ -2,6 +2,15 @@
 
 ## 0.8.3 - Unreleased
 
+### JSON Output
+- feat: include `reply_to_text` and `reply_to_sender` on message payloads
+  emitted by `history`, `search`, `watch`, and `rpc` so consumers can quote
+  the parent of a threaded reply (or non-reaction association) without a
+  follow-up chat.db lookup. The parent is resolved by joining
+  `thread_originator_guid` or the non-reaction `associated_message_guid`
+  back to the message table; absent parents leave the fields nil (#115, thanks
+  @omarshahine).
+
 ### JSON-RPC
 - feat: expose bridge-backed message RPC methods for rich sends, attachments, tapbacks, edits, unsends, deletes, and notify-anyways; include the CLI version in `imsg status --json` so callers can gate newer RPC action surfaces.
 
