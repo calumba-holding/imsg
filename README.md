@@ -1,6 +1,6 @@
-![imsg banner](docs/assets/readme-banner.jpg)
-
 # imsg
+
+![imsg banner](docs/assets/readme-banner.jpg)
 
 Read, watch, and send iMessage / SMS from the macOS terminal — with stable JSON
 and JSON-RPC surfaces designed for agents, scripts, and long-running
