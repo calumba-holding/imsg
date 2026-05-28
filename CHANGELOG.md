@@ -1,16 +1,18 @@
 # Changelog
 
-## 0.9.1 - Unreleased
+## 0.10.0 - 2026-05-28
+
+### Watch
+- fix: re-arm `watch`/RPC filesystem sources after SQLite rotates `chat.db-wal` or `chat.db-shm`, so busy iCloud-synced databases keep emitting inbound rows (#126).
+- fix: retry live watch rows whose chat metadata has not resolved yet, then drop them fail-closed instead of emitting `chat_id=0` direct-message-shaped payloads (#118).
+
+### Native Polls
+- feat: add native Apple Messages poll decoding and bridge-backed `imsg poll send` / `poll.send` support, including threaded poll replies and vote readback (#125, thanks @veteranbv).
 
 ### JSON-RPC
 - fix: return chat GUID, message GUID, and service identity from JSON-RPC send/create responses when observable (#119, thanks @svetly).
 - feat: expose `handles.check` for bridge-backed iMessage handle availability checks (#120, thanks @svetly).
 - feat: expose `message.send_status` to query outbound message delivery state by GUID (#121, thanks @svetly).
-- feat: add native Apple Messages poll decoding and bridge-backed `imsg poll send` / `poll.send` support, including threaded poll replies and vote readback (#125, thanks @veteranbv).
-
-### Watch
-- fix: re-arm `watch`/RPC filesystem sources after SQLite rotates `chat.db-wal` or `chat.db-shm`, so busy iCloud-synced databases keep emitting inbound rows (#126).
-- fix: retry live watch rows whose chat metadata has not resolved yet, then drop them fail-closed instead of emitting `chat_id=0` direct-message-shaped payloads (#118).
 
 ## 0.9.0 - 2026-05-16
 
