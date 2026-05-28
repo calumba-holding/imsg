@@ -15,7 +15,7 @@ private func sendStatusInt64Value(_ value: Any?) -> Int64? {
 func rpcMessageSendStatusReturnsNormalizedStatus() async throws {
   let store = try CommandTestDatabase.makeStoreForRPC()
   try addSendStatusColumns(to: store)
-  try store.withConnection { db in
+  _ = try store.withConnection { db in
     try db.run(
       """
       UPDATE message
