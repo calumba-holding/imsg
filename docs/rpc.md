@@ -124,6 +124,40 @@ Result:
 
 For chat-target sends, `send` also performs the [Tahoe ghost-row check](send.md#tahoe-ghost-row-protection): if Messages writes an empty unjoined SMS row instead of delivering, the call returns an error rather than `{"ok": true}`.
 
+### `message.send_status`
+
+Params:
+
+- `guid` (string, required) — outgoing message GUID.
+
+Result:
+
+```json
+{
+  "ok": true,
+  "guid": "8DF...",
+  "send_state": "delivered",
+  "service": "iMessage",
+  "checked_at": "2026-05-28T20:43:00Z",
+  "delivered_at": "2026-05-28T20:42:58Z",
+  "status_fields": {
+    "is_sent": true,
+    "is_delivered": true,
+    "is_finished": true,
+    "error": 0,
+    "date_delivered": "2026-05-28T20:42:58Z",
+    "date_read": null,
+    "is_delayed": false,
+    "is_prepared": false,
+    "is_pending_satellite_send": false,
+    "was_downgraded": false
+  }
+}
+```
+
+`send_state` is normalized to `pending`, `sent`, `delivered`, or `failed`.
+Missing rows return `pending` with `status_fields: null`.
+
 ### Bridge Message Actions
 
 These methods require the IMCore bridge and target an existing chat with `chat_id`, `chat_identifier`, or `chat_guid`.
