@@ -327,7 +327,8 @@ extension RPCServer {
     }
 
     let aliasType =
-      stringParam(params["alias_type"]) ?? (address.contains("@") ? "email" : "phone")
+      (stringParam(params["alias_type"]) ?? (address.contains("@") ? "email" : "phone"))
+      .lowercased()
     guard aliasType == "phone" || aliasType == "email" else {
       throw RPCError.invalidParams("alias_type must be phone or email")
     }
@@ -343,10 +344,12 @@ extension RPCServer {
       )
     }
 
-    let data = try await bridgeInvoker(.checkImessageAvailability, [
-      "address": address,
-      "aliasType": aliasType,
-    ])
+    let data = try await bridgeInvoker(
+      .checkImessageAvailability,
+      [
+        "address": address,
+        "aliasType": aliasType,
+      ])
 
     var result: [String: Any] = ["ok": true]
     result["address"] = data["address"] as? String ?? address
