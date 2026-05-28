@@ -24,7 +24,8 @@ Full docs: **[imsg.sh](https://imsg.sh)**.
 - **Local-first reads.** Chats, history, attachments, and search query
   `chat.db` directly — no daemon, no network round-trip.
 - **Live streams.** `imsg watch` follows filesystem events on `chat.db` and
-  falls back to a lightweight poll when macOS drops the event.
+  falls back to a lightweight poll when macOS drops events or rotates SQLite
+  WAL sidecars.
 - **Send through Messages.app.** Text, files, and standard tapbacks ride the
   public AppleScript surface — no private send APIs required.
 - **Group-aware.** Direct chats, group threads, participants, GUIDs, and
@@ -209,9 +210,14 @@ Before handing the file to Messages, `imsg` stages it under
 written after it starts. Use `--since-rowid <id>` to resume from a stored
 cursor.
 
-The watcher listens for filesystem events on `chat.db`, `chat.db-wal`, and
-`chat.db-shm`, then backs that up with a lightweight poll. The poll keeps
-streams alive when macOS drops file events or rotates SQLite sidecar files.
+The watcher listens for filesystem events on `chat.db`, `chat.db-wal`,
+`chat.db-shm`, and the containing Messages directory, then backs that up with
+a lightweight poll. The poll also refreshes the file watches, keeping streams
+alive when macOS drops file events or SQLite rotates sidecar files.
+
+If Messages writes a row before its chat metadata is joined, watch retries that
+row briefly and then drops it fail-closed instead of emitting an empty
+`chat_id=0` payload that could be mistaken for a direct message.
 
 RPC watch defaults to a 500ms debounce to reduce outbound echo races. CLI
 watch can be tuned with `--debounce`.

@@ -57,9 +57,9 @@ Two possible causes:
 
 macOS occasionally drops or coalesces filesystem events, especially after sleep/wake or under heavy I/O. Older versions of `imsg watch` could go silent in that window.
 
-`imsg` 0.6.0 added a low-frequency polling fallback that runs alongside the event watcher. If the cursor falls behind, the poll catches up. Make sure you're on 0.6.0+ (`imsg --version`).
+`imsg` 0.6.0 added a low-frequency polling fallback that runs alongside the event watcher. If the cursor falls behind, the poll catches up. `imsg` 0.9.1 also re-arms watches when SQLite rotates `chat.db-wal` or `chat.db-shm`. Make sure you're on 0.9.1+ (`imsg --version`) before debugging stale-watch reports.
 
-If you're already on 0.6.0+ and watch still misses messages, file an issue with:
+If you're already on 0.9.1+ and watch still misses messages, file an issue with:
 
 - macOS version (`sw_vers`).
 - `imsg --version`.

@@ -87,6 +87,8 @@ The RPC default debounce (`500ms`) is intentionally higher than the CLI default 
 
 Like the CLI watch, RPC watch backs filesystem events with a low-frequency poll so a missed event or a rotated SQLite sidecar doesn't leave the subscription silent.
 
+If a live all-chat row appears before Messages has joined it to a chat, RPC watch retries it briefly and then drops it fail-closed instead of emitting an empty `chat_id=0` direct-message-shaped payload.
+
 ### `watch.unsubscribe`
 
 Params:
