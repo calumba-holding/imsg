@@ -7,6 +7,8 @@ import Testing
 private struct WatcherTestStore {
   let store: MessageStore
   let insertMessage: (Int64, String) throws -> Void
+  let insertUnjoinedMessage: (Int64, String) throws -> Void
+  let joinMessage: (Int64, Int64) throws -> Void
 }
 
 private enum WatcherTestDatabase {
@@ -74,20 +76,40 @@ private enum WatcherTestDatabase {
     return WatcherTestStore(
       store: store,
       insertMessage: { rowID, text in
-        try store.withConnection { db in
-          try db.run(
-            """
-            INSERT INTO message(ROWID, handle_id, text, date, is_from_me, service)
-            VALUES (?, 1, ?, ?, 0, 'iMessage')
-            """,
-            rowID,
-            text,
-            appleEpoch(Date())
-          )
-          try db.run("INSERT INTO chat_message_join(chat_id, message_id) VALUES (1, ?)", rowID)
-        }
+        try insertMutableMessage(store: store, rowID: rowID, text: text)
+        try joinMutableMessage(store: store, rowID: rowID, chatID: 1)
+      },
+      insertUnjoinedMessage: { rowID, text in
+        try insertMutableMessage(store: store, rowID: rowID, text: text)
+      },
+      joinMessage: { rowID, chatID in
+        try joinMutableMessage(store: store, rowID: rowID, chatID: chatID)
       }
     )
+  }
+
+  private static func insertMutableMessage(store: MessageStore, rowID: Int64, text: String)
+    throws
+  {
+    _ = try store.withConnection { db in
+      try db.run(
+        """
+        INSERT INTO message(ROWID, handle_id, text, date, is_from_me, service)
+        VALUES (?, 1, ?, ?, 0, 'iMessage')
+        """,
+        rowID,
+        text,
+        appleEpoch(Date())
+      )
+    }
+  }
+
+  private static func joinMutableMessage(store: MessageStore, rowID: Int64, chatID: Int64)
+    throws
+  {
+    _ = try store.withConnection { db in
+      try db.run("INSERT INTO chat_message_join(chat_id, message_id) VALUES (?, ?)", chatID, rowID)
+    }
   }
 }
 
@@ -155,6 +177,59 @@ func messageWatcherFallbackPollYieldsMessagesWithoutFileEvents() async throws {
   let message = try await task.value
   #expect(message?.rowID == 2)
   #expect(message?.text == "fallback")
+}
+
+@Test
+func messageWatcherRetriesUnresolvedChatMetadata() async throws {
+  let fixture = try WatcherTestDatabase.makeMutableStore()
+  let watcher = MessageWatcher(store: fixture.store)
+  let stream = watcher.stream(
+    chatID: nil,
+    sinceRowID: 0,
+    configuration: MessageWatcherConfiguration(
+      debounceInterval: 0.01,
+      fallbackPollInterval: 0.01,
+      batchLimit: 10
+    )
+  )
+
+  let task = Task { try await nextMessage(from: stream) }
+
+  try await Task.sleep(nanoseconds: 20_000_000)
+  try fixture.insertUnjoinedMessage(2, "unresolved")
+  try await Task.sleep(nanoseconds: 30_000_000)
+  try fixture.joinMessage(2, 1)
+
+  let message = try await task.value
+  #expect(message?.rowID == 2)
+  #expect(message?.chatID == 1)
+  #expect(message?.text == "unresolved")
+}
+
+@Test
+func messageWatcherSkipsPersistentlyUnresolvedChatMetadata() async throws {
+  let fixture = try WatcherTestDatabase.makeMutableStore()
+  let watcher = MessageWatcher(store: fixture.store)
+  let stream = watcher.stream(
+    chatID: nil,
+    sinceRowID: 0,
+    configuration: MessageWatcherConfiguration(
+      debounceInterval: 0.001,
+      fallbackPollInterval: 0.01,
+      batchLimit: 10
+    )
+  )
+
+  let task = Task { try await nextMessage(from: stream) }
+
+  try await Task.sleep(nanoseconds: 20_000_000)
+  try fixture.insertUnjoinedMessage(2, "orphan")
+  try fixture.insertMessage(3, "after orphan")
+
+  let message = try await task.value
+  #expect(message?.rowID == 3)
+  #expect(message?.chatID == 1)
+  #expect(message?.text == "after orphan")
 }
 
 #if os(macOS)

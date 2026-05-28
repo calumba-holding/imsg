@@ -53,6 +53,14 @@ public final class MessageWatcher: @unchecked Sendable {
 }
 
 private final class WatchState: @unchecked Sendable {
+  private static let unresolvedChatRetryLimit = 20
+
+  private enum MessageYieldDecision {
+    case yield
+    case retry
+    case skip
+  }
+
   private let store: MessageStore
   private let chatID: Int64?
   private let configuration: MessageWatcherConfiguration
@@ -76,6 +84,7 @@ private final class WatchState: @unchecked Sendable {
   #endif
   private var pending = false
   private var stopped = false
+  private var unresolvedChatAttempts: [Int64: Int] = [:]
 
   init(
     store: MessageStore,
@@ -234,6 +243,14 @@ private final class WatchState: @unchecked Sendable {
         includeReactions: configuration.includeReactions
       )
       for message in messages {
+        switch yieldDecision(for: message) {
+        case .yield:
+          break
+        case .retry:
+          return
+        case .skip:
+          continue
+        }
         continuation.yield(message)
         if message.rowID > cursor {
           cursor = message.rowID
@@ -242,5 +259,25 @@ private final class WatchState: @unchecked Sendable {
     } catch {
       continuation.finish(throwing: error)
     }
+  }
+
+  private func yieldDecision(for message: Message) -> MessageYieldDecision {
+    guard message.chatID <= 0 else {
+      unresolvedChatAttempts.removeValue(forKey: message.rowID)
+      return .yield
+    }
+
+    let attempts = (unresolvedChatAttempts[message.rowID] ?? 0) + 1
+    unresolvedChatAttempts[message.rowID] = attempts
+    if attempts <= Self.unresolvedChatRetryLimit {
+      schedulePoll()
+      return .retry
+    }
+
+    unresolvedChatAttempts.removeValue(forKey: message.rowID)
+    if message.rowID > cursor {
+      cursor = message.rowID
+    }
+    return .skip
   }
 }

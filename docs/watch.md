@@ -80,6 +80,9 @@ imsg watch --chat-id 42 --debounce 250ms --json
 ```
 
 When Messages writes a message, it often follows up with WAL flushes, attachment metadata updates, and `is_from_me` corrections within a few milliseconds. The debouncer collapses those into one stable emission per row.
+If a row appears before its chat metadata resolves, watch retries it briefly and
+then drops it fail-closed instead of emitting an empty `chat_id=0` payload that
+could look like a direct message.
 
 - CLI default: `250ms`.
 - RPC default: `500ms` (RPC's typical caller is an agent more sensitive to outbound echo races).

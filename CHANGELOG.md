@@ -10,6 +10,7 @@
 
 ### Watch
 - fix: re-arm `watch`/RPC filesystem sources after SQLite rotates `chat.db-wal` or `chat.db-shm`, so busy iCloud-synced databases keep emitting inbound rows (#126).
+- fix: retry live watch rows whose chat metadata has not resolved yet, then drop them fail-closed instead of emitting `chat_id=0` direct-message-shaped payloads (#118).
 
 ## 0.9.0 - 2026-05-16
 
