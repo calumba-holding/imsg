@@ -70,6 +70,7 @@ xattr -cr "$DIST_DIR"
 find "$DIST_DIR" -name '._*' -delete
 
 DITTO_BIN=${DITTO_BIN:-/usr/bin/ditto}
+rm -f "$ZIP_PATH"
 (
   cd "$DIST_DIR"
   "$DITTO_BIN" --norsrc -c -k . "$ZIP_PATH"
