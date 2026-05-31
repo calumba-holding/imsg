@@ -217,7 +217,7 @@ extension RPCServer {
     }
     var effectiveService = service
     if service == .auto && !input.hasChatTarget && !input.recipient.isEmpty {
-      switch (try? store.preferredService(forHandle: input.recipient)) ?? .unknown {
+      switch (try? store.preferredService(forHandle: input.recipient, region: region)) ?? .unknown {
       case .imessage, .unknown:
         effectiveService = .auto
       case .sms:

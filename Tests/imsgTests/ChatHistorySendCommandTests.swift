@@ -456,7 +456,7 @@ func sendCommandAutoResolvesToSMSWhenDetected() async throws {
       sendMessage: { options in captured = options },
       resolveSentMessage: { _, _, _, _ in nil },
       storeFactory: { _ in try CommandTestDatabase.makeStoreForRPC() },
-      resolveService: { _, _ in .sms }
+      resolveService: { _, _, _ in .sms }
     )
   }
   #expect(captured?.service == .sms)
@@ -478,7 +478,7 @@ func sendCommandAutoResolvesUnknownToIMessage() async throws {
       sendMessage: { options in captured = options },
       resolveSentMessage: { _, _, _, _ in nil },
       storeFactory: { _ in try CommandTestDatabase.makeStoreForRPC() },
-      resolveService: { _, _ in .unknown }
+      resolveService: { _, _, _ in .unknown }
     )
   }
   #expect(captured?.service == .auto)
@@ -501,7 +501,7 @@ func sendCommandHonorsNoSMSFallbackFlag() async throws {
       sendMessage: { options in captured = options },
       resolveSentMessage: { _, _, _, _ in nil },
       storeFactory: { _ in try CommandTestDatabase.makeStoreForRPC() },
-      resolveService: { _, _ in .imessage }
+      resolveService: { _, _, _ in .imessage }
     )
   }
   #expect(captured?.allowSMSFallback == false)
@@ -523,7 +523,7 @@ func sendCommandDisablesSMSFallbackForAttachments() async throws {
       sendMessage: { options in captured = options },
       resolveSentMessage: { _, _, _, _ in nil },
       storeFactory: { _ in try CommandTestDatabase.makeStoreForRPC() },
-      resolveService: { _, _ in .imessage }
+      resolveService: { _, _, _ in .imessage }
     )
   }
   #expect(captured?.service == .auto)
@@ -547,7 +547,7 @@ func sendCommandExplicitServiceSkipsDetection() async throws {
       sendMessage: { options in captured = options },
       resolveSentMessage: { _, _, _, _ in nil },
       storeFactory: { _ in try CommandTestDatabase.makeStoreForRPC() },
-      resolveService: { _, _ in
+      resolveService: { _, _, _ in
         resolverCalled = true
         return .sms
       }

@@ -74,7 +74,7 @@ Fallback is intentionally narrow: it does not run for explicit `--service imessa
 imsg send --to "415-555-1212" --text "hi" --region US
 ```
 
-Defaults to `US`. Pass an ISO 3166-1 alpha-2 country code to normalize locally-formatted numbers.
+Defaults to `US`. Pass an ISO 3166-1 alpha-2 country code to normalize locally-formatted numbers. `--service auto` uses the same normalized phone number when checking local Messages history, so SMS-only history is detected for local-format numbers outside the US too.
 
 ## Confirming what was sent
 

@@ -55,9 +55,9 @@ enum SendCommand {
     contactResolverFactory: @escaping (String) async -> any ContactResolving = { region in
       await ContactResolver.create(region: region)
     },
-    resolveService: @escaping (MessageStore, String) -> HandleServiceAvailability = {
-      store, handle in
-      (try? store.preferredService(forHandle: handle)) ?? .unknown
+    resolveService: @escaping (MessageStore, String, String) -> HandleServiceAvailability = {
+      store, handle, region in
+      (try? store.preferredService(forHandle: handle, region: region)) ?? .unknown
     }
   ) async throws {
     let region = values.option("region") ?? "US"
@@ -116,7 +116,7 @@ enum SendCommand {
 
     var effectiveService = service
     if service == .auto && !input.hasChatTarget && !input.recipient.isEmpty {
-      switch resolveService(store, input.recipient) {
+      switch resolveService(store, input.recipient, region) {
       case .imessage, .unknown:
         effectiveService = .auto
       case .sms:

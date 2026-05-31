@@ -12,6 +12,23 @@ public enum HandleServiceAvailability: Sendable, Equatable {
 }
 
 extension MessageStore {
+  /// Infer the preferred service after applying the same region-aware phone
+  /// normalization used by `MessageSender`.
+  public func preferredService(
+    forHandle handle: String,
+    region: String
+  ) throws -> HandleServiceAvailability {
+    let normalized = PhoneNumberNormalizer().normalize(
+      handle,
+      region: region.isEmpty ? "US" : region
+    )
+    let normalizedAvailability = try preferredService(forHandle: normalized)
+    if normalizedAvailability != .unknown || normalized == handle {
+      return normalizedAvailability
+    }
+    return try preferredService(forHandle: handle)
+  }
+
   /// Infer the preferred service for a direct recipient from local message history.
   ///
   /// Mirrors the heuristic used by mac_messages_mcp: a recipient "has iMessage"

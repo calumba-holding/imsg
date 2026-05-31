@@ -67,6 +67,15 @@ func preferredServiceReturnsSMSWhenOnlySMSHistory() throws {
 }
 
 @Test
+func preferredServiceNormalizesHandleWithRegion() throws {
+  let (store, db) = try makeAvailabilityStore()
+  try insertHandle(db, rowID: 1, id: "+447700900000", service: "SMS")
+  try insertMessage(db, handleID: 1)
+
+  #expect(try store.preferredService(forHandle: "07700 900000", region: "GB") == .sms)
+}
+
+@Test
 func preferredServiceFallsBackToSMSWhenIMessageOnlyErrored() throws {
   let (store, db) = try makeAvailabilityStore()
   try insertHandle(db, rowID: 1, id: "+15551234567", service: "iMessage")
