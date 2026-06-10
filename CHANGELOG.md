@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.11.1 - Unreleased
+## 0.11.1 - 2026-06-10
 
 ### Read Commands
 - fix: let `chats` and `history` run without prompting for Contacts when permission is still undecided, while preserving Contacts prompts for explicit name-resolution flows (#135, thanks @cemendes).

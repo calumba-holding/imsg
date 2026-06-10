@@ -22,8 +22,15 @@ description: "Cutting an imsg release: changelog, version bump, signed/notarized
    - GitHub Actions `linux-read-core`
    - `make format` (optional, if formatting changes are expected)
 3. Build, sign, and notarize
-   - Requires `APP_STORE_CONNECT_API_KEY_P8`, `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`.
-   - `scripts/sign-and-notarize.sh` (outputs `/tmp/imsg-macos.zip` by default)
+   - Requires `APP_STORE_CONNECT_API_KEY_P8`, `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`;
+     for automation, provide these through `MAC_RELEASE_OP_ITEM` + `MAC_RELEASE_OP_FIELDS`.
+   - Run `scripts/sign-and-notarize.sh` through the shared release wrapper, for example
+     `MAC_RELEASE=/path/to/agent-scripts/skills/release-mac-app/scripts/mac-release; "$MAC_RELEASE" codesign-run --with-package-secrets -- scripts/sign-and-notarize.sh`.
+   - Set `MAC_RELEASE_CODESIGN_IDENTITY`, `MAC_RELEASE_CODESIGN_KEYCHAIN_MANAGED=1`, and either direct
+     `MAC_RELEASE_CODESIGN_KEYCHAIN` + `MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD` or `MAC_RELEASE_CODESIGN_OP_ITEM`.
+     The wrapper aborts before packaging if its locked-keychain canary cannot sign noninteractively and restore
+     the original user keychain search list.
+   - The script outputs `/tmp/imsg-macos.zip` by default.
    - Linux release archives are built by `.github/workflows/release.yml` with
      `scripts/build-linux.sh` and uploaded as `imsg-linux-x86_64.tar.gz`.
    - Verify the zip contains `imsg-bridge-helper.dylib` and required SwiftPM
