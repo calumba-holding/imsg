@@ -12,7 +12,7 @@ OUTPUT_DIR="${OUTPUT_DIR:-/tmp}"
 ZIP_PATH="${OUTPUT_DIR}/imsg-macos.zip"
 ARCHES_VALUE=${ARCHES:-"arm64 x86_64"}
 ARCH_LIST=( ${ARCHES_VALUE} )
-HELPER_ARCHES_VALUE=${HELPER_ARCHES:-"arm64e x86_64"}
+HELPER_ARCHES_VALUE=${HELPER_ARCHES:-"$ARCHES_VALUE"}
 HELPER_ARCH_LIST=( ${HELPER_ARCHES_VALUE} )
 DIST_DIR="$(mktemp -d "/tmp/${APP_NAME}-dist.XXXXXX")"
 API_KEY_FILE="$(mktemp "/tmp/${APP_NAME}-notary.XXXXXX.p8")"
@@ -50,6 +50,13 @@ clang -dynamiclib "${HELPER_CLANG_ARCH_ARGS[@]}" -fobjc-arc \
   -framework AppKit \
   -o "$DIST_DIR/$HELPER_NAME" \
   "$ROOT/Sources/IMsgHelper/IMsgInjected.m"
+
+for ARCH in "${ARCH_LIST[@]}"; do
+  if ! lipo -archs "$DIST_DIR/$HELPER_NAME" | tr ' ' '\n' | grep -Fxq "$ARCH"; then
+    echo "Helper missing required architecture slice: $ARCH" >&2
+    exit 1
+  fi
+done
 
 codesign --force --timestamp --options runtime --sign "$CODESIGN_IDENTITY" \
   --entitlements "$ENTITLEMENTS" \

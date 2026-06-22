@@ -8,7 +8,7 @@ ENTITLEMENTS="${ROOT}/Resources/imsg.entitlements"
 OUTPUT_DIR="${OUTPUT_DIR:-${ROOT}/bin}"
 ARCHES_VALUE=${ARCHES:-"arm64 x86_64"}
 ARCH_LIST=( ${ARCHES_VALUE} )
-HELPER_ARCHES_VALUE=${HELPER_ARCHES:-"arm64e x86_64"}
+HELPER_ARCHES_VALUE=${HELPER_ARCHES:-"$ARCHES_VALUE"}
 HELPER_ARCH_LIST=( ${HELPER_ARCHES_VALUE} )
 BUILD_MODE=${BUILD_MODE:-release}
 CODESIGN_IDENTITY=${CODESIGN_IDENTITY:-"-"}
@@ -63,12 +63,14 @@ for bundle in "${ROOT}/.build/${FIRST_ARCH}-apple-macosx/${BUILD_MODE}"/*.bundle
 done
 
 mkdir -p "$OUTPUT_DIR"
-if command -v trash >/dev/null 2>&1; then
-  for existing in "$OUTPUT_DIR/$APP_NAME" "$OUTPUT_DIR/$HELPER_NAME" "$OUTPUT_DIR"/*.bundle; do
-    [[ -e "$existing" ]] || continue
+for existing in "$OUTPUT_DIR/$APP_NAME" "$OUTPUT_DIR/$HELPER_NAME" "$OUTPUT_DIR"/*.bundle; do
+  [[ -e "$existing" ]] || continue
+  if command -v trash >/dev/null 2>&1; then
     trash "$existing"
-  done
-fi
+  else
+    rm -rf -- "$existing"
+  fi
+done
 
 cp "${DIST_DIR}/${APP_NAME}" "$OUTPUT_DIR/$APP_NAME"
 cp "${DIST_DIR}/${HELPER_NAME}" "$OUTPUT_DIR/$HELPER_NAME"

@@ -17,7 +17,7 @@ func universalBuildScriptDefaultsToBothMacArchitectures() throws {
   let script = try readRepositoryFile("scripts/build-universal.sh")
 
   #expect(script.contains(#"ARCHES_VALUE=${ARCHES:-"arm64 x86_64"}"#))
-  #expect(script.contains(#"HELPER_ARCHES_VALUE=${HELPER_ARCHES:-"arm64e x86_64"}"#))
+  #expect(script.contains(#"HELPER_ARCHES_VALUE=${HELPER_ARCHES:-"$ARCHES_VALUE"}"#))
   #expect(script.contains("lipo -create"))
   #expect(script.contains("imsg-bridge-helper.dylib"))
   #expect(script.contains(#"codesign --force --sign -"#))

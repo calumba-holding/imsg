@@ -5,9 +5,6 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 APP_NAME="imsg"
 OUTPUT_DIR="${OUTPUT_DIR:-${ROOT}/dist}"
 BUILD_MODE=${BUILD_MODE:-release}
-TARGET_TRIPLE=$(swift -print-target-info | python3 -c 'import json,sys; print(json.load(sys.stdin)["target"]["triple"])')
-BUILD_DIR="${ROOT}/.build/${TARGET_TRIPLE}/${BUILD_MODE}"
-ARCHIVE_NAME="${APP_NAME}-linux-x86_64.tar.gz"
 DIST_DIR="$(mktemp -d "/tmp/${APP_NAME}-linux.XXXXXX")"
 
 cleanup() {
@@ -19,6 +16,11 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   echo "scripts/build-linux.sh must run on Linux." >&2
   exit 1
 fi
+
+TARGET_TRIPLE=$(swift -print-target-info | python3 -c 'import json,sys; print(json.load(sys.stdin)["target"]["triple"])')
+TARGET_ARCH="${TARGET_TRIPLE%%-*}"
+BUILD_DIR="${ROOT}/.build/${TARGET_TRIPLE}/${BUILD_MODE}"
+ARCHIVE_NAME="${APP_NAME}-linux-${TARGET_ARCH}.tar.gz"
 
 swift build -c "$BUILD_MODE" --product "$APP_NAME"
 
