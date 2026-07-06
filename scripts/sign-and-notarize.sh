@@ -12,7 +12,10 @@ OUTPUT_DIR="${OUTPUT_DIR:-/tmp}"
 ZIP_PATH="${OUTPUT_DIR}/imsg-macos.zip"
 ARCHES_VALUE=${ARCHES:-"arm64 x86_64"}
 ARCH_LIST=( ${ARCHES_VALUE} )
-HELPER_ARCHES_VALUE=${HELPER_ARCHES:-"$ARCHES_VALUE"}
+# arm64e is mandatory for the helper: macOS 26 Messages will not load an
+# arm64-only dylib. The HELPER_ARCH_LIST validation below fails the notarize run
+# if any slice (incl. arm64e) is missing.
+HELPER_ARCHES_VALUE=${HELPER_ARCHES:-"arm64e arm64 x86_64"}
 HELPER_ARCH_LIST=( ${HELPER_ARCHES_VALUE} )
 DIST_DIR="$(mktemp -d "/tmp/${APP_NAME}-dist.XXXXXX")"
 API_KEY_FILE="$(mktemp "/tmp/${APP_NAME}-notary.XXXXXX.p8")"
@@ -52,7 +55,10 @@ clang -dynamiclib "${HELPER_CLANG_ARCH_ARGS[@]}" -fobjc-arc \
   -o "$DIST_DIR/$HELPER_NAME" \
   "$ROOT/Sources/IMsgHelper/IMsgInjected.m"
 
-for ARCH in "${ARCH_LIST[@]}"; do
+# Validate the HELPER slices, not the CLI ARCH_LIST — the helper defaults to a
+# superset (arm64e) that the CLI list does not contain, so ARCH_LIST here would
+# silently skip the arm64e check macOS 26 Messages depends on.
+for ARCH in "${HELPER_ARCH_LIST[@]}"; do
   if ! lipo -archs "$DIST_DIR/$HELPER_NAME" | tr ' ' '\n' | grep -Fxq "$ARCH"; then
     echo "Helper missing required architecture slice: $ARCH" >&2
     exit 1
