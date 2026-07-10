@@ -83,6 +83,29 @@ Returned by `imsg scheduled list --json` and in the JSON-RPC `messages.scheduled
 | `schedule_type` | int | Raw Messages scheduling type. |
 | `schedule_state` | int | Raw Messages scheduling state. |
 
+## Chat background status
+
+Returned by `imsg chat-background status --chat-id <id> --json`. This surface is read-only and does not require the IMCore bridge.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `chat_id` | int | Local chat rowid. |
+| `chat_guid` | string | Portable chat GUID. |
+| `background_set` | bool | Whether the chat properties contain a background channel. |
+| `background_channel_guid` | string | Background channel identifier; omitted when no background is set. |
+| `asset_url` | string | Raw background asset URL when present. |
+| `asset_id` | string | Raw background asset identifier when present. |
+| `object_id` | string | Raw background object identifier when present. |
+| `file_size` | int | Raw asset size when present. |
+| `poster_version` | int | Raw PosterKit version when present. |
+| `communication_safety_state` | int | Raw communication-safety state when present. |
+| `version` | int | Raw background metadata version when present. |
+| `cache_path` | string | Cache path next to the selected Messages database. |
+| `cache_exists` | bool | Whether `cache_path` exists. |
+| `watch_background_path` | string | Watch-background cache path when a background channel exists. |
+| `watch_background_exists` | bool | Whether `watch_background_path` exists. |
+| `latest_event` | object | Newest background set/clear event by message date, with `row_id`, `guid`, `action`, and `date`. |
+
 ### URL preview coalescing
 
 Messages may store a link send as two rows: the user's text row and a later `com.apple.messages.URLBalloonProvider` preview row. `history`, `search`, `watch`, `messages.history`, and `watch.subscribe` coalesce those rows into one logical message when the preview immediately follows a same-chat/same-sender text row containing the preview URL. In batch reads the coalesced message includes:

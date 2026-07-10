@@ -103,6 +103,9 @@ imsg stats --media --json
 
 # List future Send Later rows without launching Messages.
 imsg scheduled list --json
+
+# Inspect a chat's local background metadata and cache state.
+imsg chat-background status --chat-id 42 --json
 ```
 
 `--json` emits one JSON object per line. Pipe to `jq -s` to materialize an
@@ -121,6 +124,7 @@ Automation):
 - `imsg search --query <text> [--match contains|exact] [--limit 50] [--json]`
 - `imsg stats [--chat-id <id>] [--time-zone <IANA>] [--media] [--json]`
 - `imsg scheduled list [--limit 50] [--json]`
+- `imsg chat-background status --chat-id <id> [--json]`
 - `imsg send (--to <handle-or-contact-name> | --chat-id <id> | --chat-identifier <id> | --chat-guid <guid>) [--text <text>] [--file <path>] [--service imessage|sms|auto] [--no-sms-fallback] [--region US] [--json]`
 - `imsg react --chat-id <id> --reaction love|like|dislike|laugh|emphasis|question`
 - `imsg rpc`
