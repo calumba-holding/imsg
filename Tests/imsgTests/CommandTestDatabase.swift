@@ -210,7 +210,7 @@ enum CommandTestDatabase {
     return dir.appendingPathComponent("chat.db").path
   }
 
-  private static func createSchema(
+  static func createSchema(
     _ db: Connection,
     includeChatHandleJoin: Bool,
     includeReactionColumns: Bool = false,
@@ -308,7 +308,7 @@ enum CommandTestDatabase {
     try db.run("INSERT INTO chat_message_join(chat_id, message_id) VALUES (1, 1)")
   }
 
-  private static func seedRPCChat(_ db: Connection) throws {
+  static func seedRPCChat(_ db: Connection) throws {
     let now = Date()
     try db.run(
       """

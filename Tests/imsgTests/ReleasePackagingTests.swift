@@ -88,6 +88,15 @@ func bridgeHelperBuildsUseRelocatableInstallName() throws {
 }
 
 @Test
+func bridgeHelperBuildsLinkRichLinkFrameworks() throws {
+  for path in ["Makefile", "scripts/build-universal.sh", "scripts/sign-and-notarize.sh"] {
+    let contents = try readRepositoryFile(path)
+    #expect(contents.contains("-framework ImageIO"))
+    #expect(contents.contains("-framework LinkPresentation"))
+  }
+}
+
+@Test
 func executablePlistDeclaresContactsUsageDescription() throws {
   let plist = try readRepositoryFile("Sources/imsg/Resources/Info.plist")
   let generator = try readRepositoryFile("scripts/generate-version.sh")

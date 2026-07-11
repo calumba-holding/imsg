@@ -8,6 +8,7 @@ struct IMsgBridgeProtocolTests {
   @Test
   func actionRawValuesMatchDylibVocabulary() {
     #expect(BridgeAction.sendMessage.rawValue == "send-message")
+    #expect(BridgeAction.sendRichLink.rawValue == "send-rich-link")
     #expect(BridgeAction.sendPoll.rawValue == "send-poll")
     #expect(BridgeAction.sendPollUnvote.rawValue == "send-poll-unvote")
     #expect(BridgeAction.sendReaction.rawValue == "send-reaction")
@@ -92,6 +93,7 @@ struct IMsgBridgeProtocolTests {
 
     for action in [
       BridgeAction.sendMessage,
+      .sendRichLink,
       .sendMultipart,
       .sendAttachment,
       .sendPoll,
