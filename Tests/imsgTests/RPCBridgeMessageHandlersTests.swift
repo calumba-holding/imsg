@@ -27,6 +27,7 @@ func rpcStatusAdvertisesBridgeMessageMethods() {
   for method in [
     "send.rich",
     "send.attachment",
+    "send.sticker",
     "poll.send",
     "messages.poll.send",
     "poll.vote",

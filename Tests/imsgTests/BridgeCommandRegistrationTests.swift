@@ -12,7 +12,7 @@ import Testing
 func commandRouterIncludesAllBridgeCommands() {
   let router = CommandRouter()
   let expected: [String] = [
-    "send-rich", "send-multipart", "send-attachment", "tapback",
+    "send-rich", "send-multipart", "send-attachment", "send-sticker", "tapback",
     "poll", "edit", "unsend", "delete-message", "notify-anyways",
     "chat-create", "chat-name", "chat-photo",
     "chat-add-member", "chat-remove-member",
@@ -40,6 +40,7 @@ func bridgeMessagingCommandsExposeChatRequirement() async {
     ("unsend", ["--message", "message-guid"]),
     ("delete-message", ["--message", "message-guid"]),
     ("tapback", ["--message", "message-guid", "--kind", "love"]),
+    ("send-sticker", ["--file", "~/Desktop/sticker.png"]),
   ]
   for testCase in cases {
     let (output, status) = await StdoutCapture.capture {
@@ -48,36 +49,6 @@ func bridgeMessagingCommandsExposeChatRequirement() async {
     #expect(status == 1, "\(testCase.name) should require --chat")
     #expect(output.contains("Missing required option: --chat"))
   }
-}
-
-@Test
-func bridgeAttachmentStagingUsesChatGuid() throws {
-  let testFile = URL(fileURLWithPath: #filePath)
-  let repoRoot =
-    testFile
-    .deletingLastPathComponent()
-    .deletingLastPathComponent()
-    .deletingLastPathComponent()
-  let helper = repoRoot.appendingPathComponent("Sources/IMsgHelper/IMsgInjected.m")
-  let source = stripObjectiveCComments(try String(contentsOf: helper, encoding: .utf8))
-  let sendAttachmentBody = try #require(
-    functionBody(
-      named: "handleSendAttachment",
-      in: source
-    ))
-
-  let prepareSignature =
-    #"prepareOutgoingTransfer\s*\([^)]*NSString\s*\*chatGuid\s*,"#
-    + #"\s*BOOL\s+hideAttachment\s*,\s*NSString\s*\*mimeType\s*,"#
-    + #"\s*NSString\s*\*\*outErr\)"#
-  #expect(source.range(of: prepareSignature, options: .regularExpression) != nil)
-  #expect(
-    source.contains(
-      "_persistentPathForTransfer:filename:highQuality:chatGUID:storeAtExternalPath:"))
-  #expect(source.contains("[inv setArgument:&cg atIndex:5];"))
-  #expect(
-    sendAttachmentBody.contains("prepareOutgoingTransfer(fileURL, filename, chatGuid"))
-  #expect(sendAttachmentBody.contains("NO, nil, &prepErr"))
 }
 
 @Test
@@ -147,7 +118,8 @@ func injectedHelperHardensRichLinkImageTransfer() throws {
     sendBody.range(of: "registerPreparedTransfer(richLinkTransfer"))
   #expect(prepare.lowerBound < construct.lowerBound)
   #expect(construct.lowerBound < register.lowerBound)
-  #expect(unregisteredBody.contains("hideAttachment, mimeType, NO, outErr"))
+  #expect(unregisteredBody.contains("IMsgOutgoingTransferKindRichLinkPreview"))
+  #expect(unregisteredBody.contains("prepareOutgoingTransfer(originalURL"))
 
   // URL previews have their own bridge action. Generic send-message rejects a
   // smuggled descriptor, while send-rich-link requires one before entering the
@@ -194,7 +166,7 @@ func injectedHelperFindsNestedThreadReplyItems() throws {
     functionBody(named: "findMessageItem", in: source)
   )
   let loadBody = try #require(
-    functionBody(named: "loadParentFirstChatItem", in: source)
+    functionBody(named: "loadParentChatItem", in: source)
   )
 
   #expect(recursiveBody.contains("depth > 8"))

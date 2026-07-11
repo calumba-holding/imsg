@@ -11,17 +11,18 @@
 
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
+#import <CommonCrypto/CommonDigest.h>
 #import <ImageIO/ImageIO.h>
 #import <LinkPresentation/LinkPresentation.h>
-#import <CommonCrypto/CommonDigest.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <os/lock.h>
-#import <unistd.h>
+#import <errno.h>
 #import <fcntl.h>
 #import <pwd.h>
-#import <errno.h>
+#import <unistd.h>
 #import <stdio.h>
+#import <string.h>
 #import <signal.h>
 #import <sys/stat.h>
 #import <dlfcn.h>
@@ -430,9 +431,18 @@ static void probeSelectors(void) {
 - (void)registerTransferWithDaemon:(NSString *)guid;
 @end
 
+typedef NS_ENUM(NSInteger, IMsgOutgoingTransferKind) {
+    IMsgOutgoingTransferKindAttachment = 0,
+    IMsgOutgoingTransferKindSticker = 1,
+    IMsgOutgoingTransferKindRichLinkPreview = 2,
+};
+
 static IMFileTransfer *prepareOutgoingTransfer(NSURL *originalURL, NSString *filename,
-                                               NSString *chatGuid, BOOL hideAttachment,
-                                               NSString *mimeType, NSString **outErr);
+                                               NSString *chatGuid,
+                                               IMsgOutgoingTransferKind transferKind,
+                                               NSDictionary *transferMetadata,
+                                               NSString **outActivePath,
+                                               NSString **outErr);
 static IMFileTransfer *prepareUnregisteredOutgoingTransfer(
     NSURL *originalURL, NSString *filename, NSString *chatGuid,
     BOOL hideAttachment, NSString *mimeType, NSString **outErr);
@@ -507,6 +517,7 @@ static NSString *serviceNameForChat(IMChat *chat, NSString *chatGuid) {
     if (serviceName.length) return serviceName;
     if ([chatGuid hasPrefix:@"SMS;"]) return @"SMS";
     if ([chatGuid hasPrefix:@"iMessage;"]) return @"iMessage";
+    if ([chatGuid hasPrefix:@"iMessageLite;"]) return @"iMessageLite";
     return nil;
 }
 
@@ -884,6 +895,35 @@ static NSDictionary* handleRead(NSInteger requestId, NSDictionary *params) {
     }
 }
 
+static BOOL stickerAttachmentMessageInitializerAvailable(void) {
+    Class messageClass = NSClassFromString(@"IMMessage");
+    return [messageClass instancesRespondToSelector:NSSelectorFromString(
+        @"initWithSender:time:text:messageSubject:fileTransferGUIDs:flags:error:guid:subject:balloonBundleID:payloadData:expressiveSendStyleID:")]
+        || [messageClass instancesRespondToSelector:NSSelectorFromString(
+            @"initIMMessageWithSender:time:text:messageSubject:fileTransferGUIDs:flags:error:guid:subject:balloonBundleID:payloadData:expressiveSendStyleID:")];
+}
+
+static BOOL stickerAssociatedMessageInitializerAvailable(void) {
+    Class messageClass = NSClassFromString(@"IMMessage");
+    return [messageClass instancesRespondToSelector:NSSelectorFromString(
+        @"initWithSender:time:text:messageSubject:fileTransferGUIDs:flags:error:guid:subject:associatedMessageGUID:associatedMessageType:associatedMessageRange:messageSummaryInfo:")]
+        || [messageClass instancesRespondToSelector:NSSelectorFromString(
+            @"initIMMessageWithSender:time:text:messageSubject:fileTransferGUIDs:flags:error:guid:subject:balloonBundleID:payloadData:expressiveSendStyleID:associatedMessageGUID:associatedMessageType:associatedMessageRange:messageSummaryInfo:")];
+}
+
+static BOOL stickerTransferSelectorsAvailable(void) {
+    Class transferClass = NSClassFromString(@"IMFileTransfer");
+    Class centerClass = NSClassFromString(@"IMFileTransferCenter");
+    return [transferClass instancesRespondToSelector:NSSelectorFromString(@"setIsSticker:")]
+        && [transferClass instancesRespondToSelector:NSSelectorFromString(@"setStickerUserInfo:")]
+        && [transferClass instancesRespondToSelector:NSSelectorFromString(@"setAttributionInfo:")]
+        && [centerClass instancesRespondToSelector:NSSelectorFromString(
+            @"guidForNewOutgoingTransferWithLocalURL:")]
+        && [centerClass instancesRespondToSelector:NSSelectorFromString(@"transferForGUID:")]
+        && [centerClass instancesRespondToSelector:NSSelectorFromString(
+            @"registerTransferWithDaemon:")];
+}
+
 static NSDictionary* handleStatus(NSInteger requestId, NSDictionary *params) {
     Class registryClass = NSClassFromString(@"IMChatRegistry");
     BOOL hasRegistry = (registryClass != nil);
@@ -897,6 +937,41 @@ static NSDictionary* handleStatus(NSInteger requestId, NSDictionary *params) {
         }
     }
 
+    Class stickerTransferClass = NSClassFromString(@"IMFileTransfer");
+    Class transferCenterClass = NSClassFromString(@"IMFileTransferCenter");
+    BOOL stickerSetIsSticker = [stickerTransferClass instancesRespondToSelector:
+        NSSelectorFromString(@"setIsSticker:")];
+    BOOL stickerSetUserInfo = [stickerTransferClass instancesRespondToSelector:
+        NSSelectorFromString(@"setStickerUserInfo:")];
+    BOOL stickerSetAttribution = [stickerTransferClass instancesRespondToSelector:
+        NSSelectorFromString(@"setAttributionInfo:")];
+    BOOL stickerTransferCenter =
+        [transferCenterClass instancesRespondToSelector:
+            NSSelectorFromString(@"guidForNewOutgoingTransferWithLocalURL:")]
+        && [transferCenterClass instancesRespondToSelector:
+            NSSelectorFromString(@"transferForGUID:")]
+        && [transferCenterClass instancesRespondToSelector:
+            NSSelectorFromString(@"registerTransferWithDaemon:")];
+    BOOL stickerReplyTo = [NSClassFromString(@"IMMessage")
+        instancesRespondToSelector:NSSelectorFromString(@"setReplyToGUID:")];
+    BOOL stickerTargetMembership = [NSClassFromString(@"IMChat")
+        instancesRespondToSelector:NSSelectorFromString(@"hasStoredMessageWithGUID:")];
+    BOOL stickerTargetLookup = [NSClassFromString(@"IMChatHistoryController")
+        instancesRespondToSelector:NSSelectorFromString(
+            @"loadMessageWithGUID:completionBlock:")]
+        && [NSClassFromString(@"IMMessage")
+            instancesRespondToSelector:NSSelectorFromString(@"_imMessageItem")]
+        && [NSClassFromString(@"IMMessageItem")
+            instancesRespondToSelector:NSSelectorFromString(@"_newChatItems")]
+        && [NSClassFromString(@"IMMessagePartChatItem")
+            instancesRespondToSelector:NSSelectorFromString(@"index")]
+        && [NSClassFromString(@"IMMessagePartChatItem")
+            instancesRespondToSelector:NSSelectorFromString(@"messagePartRange")];
+    BOOL stickerAttachmentMessage = stickerAttachmentMessageInitializerAvailable();
+    BOOL stickerAssociatedMessage = stickerAssociatedMessageInitializerAvailable();
+    BOOL stickerSend = stickerSetIsSticker && stickerSetUserInfo
+        && stickerSetAttribution && stickerTransferCenter && stickerAttachmentMessage;
+
     NSDictionary *selectors = @{
         @"editMessageItem": @(gHasEditMessageItem),
         @"editMessage": @(gHasEditMessage),
@@ -904,6 +979,19 @@ static NSDictionary* handleStatus(NSInteger requestId, NSDictionary *params) {
         @"sendMessageReason": @(gHasSendMessageReason),
         @"pollPayloadMessage": @(pollPayloadMessageInitializerAvailable()),
         @"pollVoteMessage": @(pollVoteMessageInitializerAvailable()),
+        @"stickerSetIsSticker": @(stickerSetIsSticker),
+        @"stickerSetUserInfo": @(stickerSetUserInfo),
+        @"stickerSetAttribution": @(stickerSetAttribution),
+        @"stickerTransferCenter": @(stickerTransferCenter),
+        @"stickerReplyTo": @(stickerReplyTo),
+        @"stickerTargetMembership": @(stickerTargetMembership),
+        @"stickerTargetLookup": @(stickerTargetLookup),
+        @"stickerAttachmentMessage": @(stickerAttachmentMessage),
+        @"stickerAssociatedMessage": @(stickerAssociatedMessage),
+        @"stickerSend": @(stickerSend),
+        @"stickerAttach": @(
+            stickerSend && stickerTargetMembership && stickerTargetLookup
+                && stickerAssociatedMessage),
         @"urlPreviewMessage": @(urlPreviewMessageInitializerAvailable()),
         @"sendRichLinkAction": @YES,
         @"pollUpdateMessage": @(pollVoteMessageInitializerAvailable()),
@@ -993,22 +1081,20 @@ static IMChat *resolveChatByGuid(NSString *chatGuid) {
         if (chat) return chat;
     }
 
-    // Fallback: parse trailing address out of `<service>;<+|->;<address>`
-    // and try to vend a handle, then materialize a chat.
+    // Fallback: parse a direct `<service>;-;<address>` guid and materialize
+    // a chat using only a handle for the explicitly requested service.
     NSArray *parts = [chatGuid componentsSeparatedByString:@";"];
-    if (parts.count == 3) {
+    if (parts.count == 3 && [parts[1] isEqualToString:@"-"]) {
+        NSString *preferredService = parts.firstObject;
         NSString *address = parts.lastObject;
         Class hrClass = NSClassFromString(@"IMHandleRegistrar");
         if (hrClass) {
             id hr = [hrClass performSelector:@selector(sharedInstance)];
-            if ([hr respondsToSelector:@selector(IMHandleWithID:)]) {
-                id handle = [hr performSelector:@selector(IMHandleWithID:)
-                                     withObject:address];
-                if (handle && [registry respondsToSelector:@selector(chatForIMHandle:)]) {
-                    id chat = [registry performSelector:@selector(chatForIMHandle:)
-                                             withObject:handle];
-                    if (chat) return chat;
-                }
+            id handle = vendIMHandle(hr, address, preferredService, NO);
+            if (handle && [registry respondsToSelector:@selector(chatForIMHandle:)]) {
+                id chat = [registry performSelector:@selector(chatForIMHandle:)
+                                         withObject:handle];
+                if (chat) return chat;
             }
         }
     }
@@ -1614,7 +1700,27 @@ static id normalizeFoundMessageItem(id object) {
     return normalizeFoundMessageItemWithChatContext(object, nil);
 }
 
-static id loadParentFirstChatItem(NSString *parentGuid, id *outParentMessage) {
+static id chatItemWithPartIndex(id candidate, NSInteger partIndex) {
+    if ([candidate isKindOfClass:[NSArray class]]) {
+        for (id item in (NSArray *)candidate) {
+            id match = chatItemWithPartIndex(item, partIndex);
+            if (match) return match;
+        }
+        return nil;
+    }
+    id aggregate = safelyReadObjectSelector(
+        candidate, @selector(aggregateAttachmentParts));
+    id aggregateMatch = chatItemWithPartIndex(aggregate, partIndex);
+    if (aggregateMatch) return aggregateMatch;
+    if ([candidate respondsToSelector:@selector(index)]
+        && [(IMMessagePartChatItem *)candidate index] == partIndex) {
+        return candidate;
+    }
+    return nil;
+}
+
+static id loadParentChatItem(NSString *parentGuid, NSNumber *partIndex,
+                             id *outParentMessage) {
     if (outParentMessage) *outParentMessage = nil;
     if (parentGuid.length == 0) return nil;
 
@@ -1645,7 +1751,14 @@ static id loadParentFirstChatItem(NSString *parentGuid, id *outParentMessage) {
     }
     if (!parent) return nil;
     if (outParentMessage) *outParentMessage = parent;
+    id parentItem = safelyReadObjectSelector(parent, @selector(_imMessageItem));
+    id items = safelyReadObjectSelector(parentItem, @selector(_newChatItems));
+    if (partIndex) return chatItemWithPartIndex(items, partIndex.integerValue);
     return normalizeFoundMessageItem(parent);
+}
+
+static id loadParentFirstChatItem(NSString *parentGuid, id *outParentMessage) {
+    return loadParentChatItem(parentGuid, nil, outParentMessage);
 }
 
 /// Dispatch a built IMMessage into the chat after installing the same
@@ -2645,6 +2758,11 @@ static id buildIMMessage(NSAttributedString *body,
         }
     }
 
+    if (isReaction) {
+        // Never degrade associated-message semantics into a normal send.
+        return nil;
+    }
+
     // Normal send / reply path. Try the BB-verified macOS 26 selector
     // (`initWithSender:…:expressiveSendStyleID:`, 12 args, no `IMMessage`
     // prefix) first; fall back to the legacy `initIMMessageWithSender:` for
@@ -2718,6 +2836,10 @@ static id buildIMMessage(NSAttributedString *body,
         }
         return result;
     }
+
+    // The simplest initializer cannot carry transfer GUIDs. An attachment
+    // must fail closed instead of reporting a successful text-only send.
+    if (hasAttachment) return nil;
 
     // Last resort: simplest 2-arg initializer if the long form isn't available.
     SEL simple = @selector(initWithText:flags:);
@@ -4024,6 +4146,472 @@ static NSAttributedString *buildAttachmentAttributed(NSString *transferGuid,
     return [[NSAttributedString alloc] initWithString:@"￼" attributes:attrs];
 }
 
+static void setIntegerProperty(id object, SEL selector, NSInteger value) {
+    if (!object || ![object respondsToSelector:selector]) return;
+    NSMethodSignature *sig = [object methodSignatureForSelector:selector];
+    NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+    [inv setSelector:selector];
+    [inv setTarget:object];
+    [inv setArgument:&value atIndex:2];
+    [inv invoke];
+}
+
+static const unsigned long long kMaxStickerBytes = 500ULL * 1024ULL;
+static const NSUInteger kMaxStickerDimension = 618;
+static const NSUInteger kMaxStickerFrames = 100;
+static const unsigned long long kMaxStickerDecodedPixels = 25000000ULL;
+static NSString * const kDefaultStickerParentPreviewWidth = @"163.73095703";
+
+static NSString *actualUserHomeDirectory(void) {
+    struct passwd *entry = getpwuid(getuid());
+    if (!entry || !entry->pw_dir) return nil;
+    return [NSString stringWithUTF8String:entry->pw_dir];
+}
+
+static NSString *trustedMessagesAttachmentsRoot(void) {
+    return [actualUserHomeDirectory()
+        stringByAppendingPathComponent:@"Library/Messages/Attachments"];
+}
+
+static NSString *trustedStickerRoot(void) {
+    return [trustedMessagesAttachmentsRoot()
+        stringByAppendingPathComponent:@"imsg/stickers"];
+}
+
+static BOOL pathIsWithinRoot(NSString *path, NSString *root) {
+    if (![path isKindOfClass:[NSString class]] || !path.isAbsolutePath) return NO;
+    NSString *candidate = [path stringByStandardizingPath];
+    NSString *standardRoot = [root stringByStandardizingPath];
+    return standardRoot.length
+        && [candidate hasPrefix:[standardRoot stringByAppendingString:@"/"]];
+}
+
+static BOOL stickerPathIsTrusted(NSString *path) {
+    return pathIsWithinRoot(path, trustedStickerRoot());
+}
+
+static int openUserOwnedDirectorySecurely(NSString *directoryPath,
+                                          NSString *requiredRoot) {
+    NSString *root = [requiredRoot stringByStandardizingPath];
+    NSString *directory = [directoryPath stringByStandardizingPath];
+    if (!root.length || !directory.length) return -1;
+    if (![directory isEqualToString:root]
+        && ![directory hasPrefix:[root stringByAppendingString:@"/"]]) {
+        return -1;
+    }
+
+    NSString *home = [actualUserHomeDirectory() stringByStandardizingPath];
+    if (!home.length || ![root hasPrefix:[home stringByAppendingString:@"/"]]) return -1;
+    int directoryFD = open(home.fileSystemRepresentation,
+                           O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
+    if (directoryFD < 0) return -1;
+    struct stat homeInfo = {0};
+    if (fstat(directoryFD, &homeInfo) != 0 || !S_ISDIR(homeInfo.st_mode)
+        || homeInfo.st_uid != getuid() || (homeInfo.st_mode & S_IWOTH)) {
+        close(directoryFD);
+        return -1;
+    }
+    NSString *relative = [directory substringFromIndex:home.length + 1];
+    NSArray<NSString *> *components = relative.pathComponents;
+    for (NSString *component in components) {
+        if ([component isEqualToString:@"."] || [component isEqualToString:@".."]
+            || [component isEqualToString:@"/"] || component.length == 0) {
+            close(directoryFD);
+            return -1;
+        }
+        int nextFD = openat(directoryFD, component.fileSystemRepresentation,
+                            O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
+        close(directoryFD);
+        if (nextFD < 0) return -1;
+        struct stat componentInfo = {0};
+        if (fstat(nextFD, &componentInfo) != 0 || !S_ISDIR(componentInfo.st_mode)
+            || componentInfo.st_uid != getuid() || (componentInfo.st_mode & S_IWOTH)) {
+            close(nextFD);
+            return -1;
+        }
+        directoryFD = nextFD;
+    }
+    return directoryFD;
+}
+
+static int openStickerDirectorySecurely(NSString *directoryPath) {
+    return openUserOwnedDirectorySecurely(directoryPath, trustedStickerRoot());
+}
+
+static int openStickerTransferDirectorySecurely(NSString *directoryPath) {
+    return openUserOwnedDirectorySecurely(
+        directoryPath, trustedMessagesAttachmentsRoot());
+}
+
+static NSData *readStickerSnapshot(NSString *path, NSString **outErr) {
+    NSString *directory = [path stringByDeletingLastPathComponent];
+    int directoryFD = openStickerDirectorySecurely(directory);
+    if (directoryFD < 0) {
+        if (outErr) *outErr = @"Could not securely open sticker directory";
+        return nil;
+    }
+    int fd = openat(directoryFD, path.lastPathComponent.fileSystemRepresentation,
+                    O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    close(directoryFD);
+    if (fd < 0) {
+        if (outErr) *outErr = @"Could not securely open sticker image";
+        return nil;
+    }
+    struct stat before = {0};
+    if (fstat(fd, &before) != 0 || !S_ISREG(before.st_mode) || before.st_nlink != 1) {
+        close(fd);
+        if (outErr) *outErr = @"Sticker must be a single-link regular file";
+        return nil;
+    }
+    if (before.st_size <= 0 || (unsigned long long)before.st_size > kMaxStickerBytes) {
+        close(fd);
+        if (outErr) {
+            *outErr = [NSString stringWithFormat:
+                @"Sticker image must be between 1 byte and %llu bytes", kMaxStickerBytes];
+        }
+        return nil;
+    }
+
+    NSMutableData *data = [NSMutableData dataWithCapacity:(NSUInteger)before.st_size];
+    unsigned char buffer[64 * 1024];
+    while (YES) {
+        ssize_t count = read(fd, buffer, sizeof(buffer));
+        if (count == 0) break;
+        if (count < 0) {
+            if (errno == EINTR) continue;
+            close(fd);
+            if (outErr) *outErr = @"Could not read sticker image";
+            return nil;
+        }
+        if ((unsigned long long)data.length + (unsigned long long)count
+            > kMaxStickerBytes) {
+            close(fd);
+            if (outErr) *outErr = @"Sticker image exceeded the size limit while reading";
+            return nil;
+        }
+        [data appendBytes:buffer length:(NSUInteger)count];
+    }
+    struct stat after = {0};
+    BOOL changed = fstat(fd, &after) != 0
+        || after.st_dev != before.st_dev
+        || after.st_ino != before.st_ino
+        || after.st_size != before.st_size
+        || after.st_mtimespec.tv_sec != before.st_mtimespec.tv_sec
+        || after.st_mtimespec.tv_nsec != before.st_mtimespec.tv_nsec
+        || after.st_ctimespec.tv_sec != before.st_ctimespec.tv_sec
+        || after.st_ctimespec.tv_nsec != before.st_ctimespec.tv_nsec;
+    close(fd);
+    if (changed || data.length != (NSUInteger)before.st_size) {
+        if (outErr) *outErr = @"Sticker file changed while it was being read";
+        return nil;
+    }
+    return data;
+}
+
+static NSString *stickerSHA256(NSData *data) {
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
+    NSMutableString *hex = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+    for (NSUInteger index = 0; index < CC_SHA256_DIGEST_LENGTH; index++) {
+        [hex appendFormat:@"%02x", digest[index]];
+    }
+    return hex;
+}
+
+static NSString *stickerMD5(NSData *data) {
+    unsigned char digest[CC_MD5_DIGEST_LENGTH];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    CC_MD5(data.bytes, (CC_LONG)data.length, digest);
+#pragma clang diagnostic pop
+    NSMutableString *hex = [NSMutableString stringWithCapacity:CC_MD5_DIGEST_LENGTH * 2];
+    for (NSUInteger index = 0; index < CC_MD5_DIGEST_LENGTH; index++) {
+        [hex appendFormat:@"%02x", digest[index]];
+    }
+    return hex;
+}
+
+static BOOL stickerContainerIsComplete(NSData *data, NSString *uti) {
+    const unsigned char *bytes = data.bytes;
+    if ([uti isEqualToString:@"public.png"]) {
+        static const unsigned char iend[] = {
+            0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+            0x4e, 0x44, 0xae, 0x42, 0x60, 0x82
+        };
+        return data.length >= sizeof(iend)
+            && memcmp(bytes + data.length - sizeof(iend), iend, sizeof(iend)) == 0;
+    }
+    if ([uti isEqualToString:@"com.compuserve.gif"]) {
+        return data.length > 0 && bytes[data.length - 1] == 0x3b;
+    }
+    if ([uti isEqualToString:@"public.jpeg"]) {
+        return data.length >= 2
+            && bytes[data.length - 2] == 0xff
+            && bytes[data.length - 1] == 0xd9;
+    }
+    return NO;
+}
+
+static NSDictionary *stickerAssetMetadata(NSString *path, NSString **outErr) {
+    if (!stickerPathIsTrusted(path) || pathHasSymlinkComponent(path)) {
+        if (outErr) *outErr = @"Sticker must use imsg's trusted staging directory";
+        return nil;
+    }
+    NSData *data = readStickerSnapshot(path, outErr);
+    if (!data) return nil;
+    CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)data, NULL);
+    if (!source) {
+        if (outErr) *outErr = @"Sticker file is not a decodable image";
+        return nil;
+    }
+    NSUInteger frameCount = CGImageSourceGetCount(source);
+    if (frameCount == 0 || frameCount > kMaxStickerFrames) {
+        if (source) CFRelease(source);
+        if (outErr) {
+            *outErr = [NSString stringWithFormat:
+                @"Sticker must contain 1...%lu frames", (unsigned long)kMaxStickerFrames];
+        }
+        return nil;
+    }
+    NSString *uti = (__bridge NSString *)CGImageSourceGetType(source);
+    NSSet *supportedTypes = [NSSet setWithObjects:
+        @"public.png", @"com.compuserve.gif", @"public.jpeg", nil];
+    if (![supportedTypes containsObject:uti]) {
+        CFRelease(source);
+        if (outErr) {
+            *outErr = [NSString stringWithFormat:
+                @"Unsupported sticker image format: %@", uti ?: @"unknown"];
+        }
+        return nil;
+    }
+    if (!stickerContainerIsComplete(data, uti)) {
+        CFRelease(source);
+        if (outErr) *outErr = @"Sticker image data is incomplete";
+        return nil;
+    }
+    NSUInteger firstWidth = 0;
+    NSUInteger firstHeight = 0;
+    unsigned long long decodedPixels = 0;
+    for (NSUInteger index = 0; index < frameCount; index++) {
+        CFDictionaryRef rawProperties =
+            CGImageSourceCopyPropertiesAtIndex(source, index, NULL);
+        if (!rawProperties) {
+            CFRelease(source);
+            if (outErr) *outErr = @"Sticker file contains invalid frame metadata";
+            return nil;
+        }
+        NSDictionary *properties = CFBridgingRelease(rawProperties);
+        NSUInteger width =
+            [properties[(NSString *)kCGImagePropertyPixelWidth] unsignedIntegerValue];
+        NSUInteger height =
+            [properties[(NSString *)kCGImagePropertyPixelHeight] unsignedIntegerValue];
+        if (width == 0 || height == 0 || width > kMaxStickerDimension
+            || height > kMaxStickerDimension) {
+            CFRelease(source);
+            if (outErr) *outErr = @"Sticker image dimensions are invalid or too large";
+            return nil;
+        }
+        if (index == 0) {
+            firstWidth = width;
+            firstHeight = height;
+        }
+        decodedPixels += (unsigned long long)width * (unsigned long long)height;
+        if (decodedPixels > kMaxStickerDecodedPixels) {
+            CFRelease(source);
+            if (outErr) *outErr = @"Sticker animation contains too many decoded pixels";
+            return nil;
+        }
+        CGImageRef frame = CGImageSourceCreateImageAtIndex(source, index, NULL);
+        if (!frame) {
+            CFRelease(source);
+            if (outErr) *outErr = @"Sticker file contains an undecodable frame";
+            return nil;
+        }
+        CGImageRelease(frame);
+    }
+    CFRelease(source);
+    NSString *hash = stickerSHA256(data);
+    NSString *md5 = stickerMD5(data);
+    NSString *extension = [uti isEqualToString:@"public.png"] ? @"png"
+        : ([uti isEqualToString:@"public.jpeg"] ? @"jpg" : @"gif");
+    return @{
+        @"data": data,
+        @"extension": extension,
+        @"hash": hash,
+        @"md5": md5,
+        @"width": @(firstWidth),
+        @"height": @(firstHeight),
+        @"uti": uti,
+    };
+}
+
+static NSString *writeStickerSnapshot(NSDictionary *metadata, NSString *sourcePath,
+                                      NSString **outErr) {
+    NSData *data = metadata[@"data"];
+    NSString *hash = metadata[@"hash"];
+    NSString *extension = metadata[@"extension"];
+    if (!data.length || !hash.length || !extension.length) {
+        if (outErr) *outErr = @"Missing validated sticker snapshot";
+        return nil;
+    }
+    NSString *directory = [sourcePath stringByDeletingLastPathComponent];
+    NSString *name = [NSString stringWithFormat:@"%@.%@", hash, extension];
+    NSString *path = [directory stringByAppendingPathComponent:name];
+    int directoryFD = openStickerDirectorySecurely(directory);
+    if (directoryFD < 0) {
+        if (outErr) *outErr = @"Could not securely open sticker directory";
+        return nil;
+    }
+    int fd = openat(directoryFD, name.fileSystemRepresentation,
+                    O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
+    if (fd < 0) {
+        close(directoryFD);
+        if (outErr) *outErr = @"Could not create private sticker snapshot";
+        return nil;
+    }
+    const unsigned char *bytes = data.bytes;
+    NSUInteger offset = 0;
+    BOOL ok = YES;
+    while (offset < data.length) {
+        ssize_t written = write(fd, bytes + offset, data.length - offset);
+        if (written < 0 && errno == EINTR) continue;
+        if (written <= 0) { ok = NO; break; }
+        offset += (NSUInteger)written;
+    }
+    if (ok && fsync(fd) != 0) ok = NO;
+    struct stat descriptorInfo = {0};
+    struct stat pathInfo = {0};
+    if (ok && fstat(fd, &descriptorInfo) != 0) ok = NO;
+    if (ok && (lstat(path.fileSystemRepresentation, &pathInfo) != 0
+        || pathInfo.st_dev != descriptorInfo.st_dev
+        || pathInfo.st_ino != descriptorInfo.st_ino
+        || !S_ISREG(pathInfo.st_mode))) ok = NO;
+    if (close(fd) != 0) ok = NO;
+    if (!ok) {
+        unlinkat(directoryFD, name.fileSystemRepresentation, 0);
+        close(directoryFD);
+        if (outErr) *outErr = @"Could not write private sticker snapshot";
+        return nil;
+    }
+    close(directoryFD);
+    return path;
+}
+
+static BOOL removeStickerFileSecurely(NSString *path) {
+    NSString *directory = [path stringByDeletingLastPathComponent];
+    int directoryFD = openStickerDirectorySecurely(directory);
+    if (directoryFD < 0) return NO;
+    int result = unlinkat(
+        directoryFD, path.lastPathComponent.fileSystemRepresentation, 0);
+    int savedErrno = errno;
+    close(directoryFD);
+    return result == 0 || savedErrno == ENOENT;
+}
+
+static BOOL removeStickerTransferFileSecurely(NSString *path) {
+    if (!pathIsWithinRoot(path, trustedMessagesAttachmentsRoot())) return NO;
+    NSString *directory = [path stringByDeletingLastPathComponent];
+    int directoryFD = openStickerTransferDirectorySecurely(directory);
+    if (directoryFD < 0) return NO;
+    int result = unlinkat(
+        directoryFD, path.lastPathComponent.fileSystemRepresentation, 0);
+    int savedErrno = errno;
+    close(directoryFD);
+    return result == 0 || savedErrno == ENOENT;
+}
+
+static BOOL stickerMessageBelongsToChat(IMChat *chat, NSString *messageGuid) {
+    SEL selector = NSSelectorFromString(@"hasStoredMessageWithGUID:");
+    if (!chat || !messageGuid.length || ![chat respondsToSelector:selector]) return NO;
+    return ((BOOL (*)(id, SEL, id))objc_msgSend)(chat, selector, messageGuid);
+}
+
+static NSDictionary *stickerUserInfo(NSDictionary *metadata) {
+    NSString *hash = metadata[@"hash"];
+    NSString *md5 = metadata[@"md5"];
+    NSString *filename = metadata[@"filename"];
+    return @{
+        @"pid": @"com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.Stickers.UserGenerated.MessagesExtension",
+        @"safi": @0,
+        @"sai": @"0",
+        // Apple uses MD5 for the sticker hash and the source basename for the
+        // sticker GUID. Integrity still uses the out-of-band SHA-256 above.
+        @"shash": md5,
+        @"sid": filename,
+        @"sli": @"0",
+        @"spv": @0,
+        // Native user-generated stickers include the target preview width in
+        // this geometry tuple. Until a stable target-layout selector is known,
+        // retain the proven centered default rather than misusing image width.
+        @"spw": kDefaultStickerParentPreviewWidth,
+        @"sro": @"0.00000000",
+        @"ssa": @"1.00000000",
+        @"stickerEffectType": @(-1),
+        @"suri": [NSString stringWithFormat:@"sticker:///imsg/%@", hash],
+        @"sxs": @"0.50000000",
+        @"sys": @"0.50000000"
+    };
+}
+
+static NSDictionary *stickerAttributionInfo(NSString *accessibilityLabel,
+                                             NSDictionary *metadata) {
+    NSString *label = [[accessibilityLabel componentsSeparatedByCharactersInSet:
+        [NSCharacterSet controlCharacterSet]] componentsJoinedByString:@" "];
+    label = [label stringByTrimmingCharactersInSet:
+        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (!label.length) label = @"Sticker";
+    if (label.length > 150) {
+        NSRange safeRange = [label rangeOfComposedCharacterSequencesForRange:NSMakeRange(0, 150)];
+        label = [label substringWithRange:safeRange];
+    }
+    return @{
+        @"accessl": label,
+        @"bundle-id": @"com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.Stickers.UserGenerated.MessagesExtension",
+        @"name": @"Stickers",
+        @"pgensh": metadata[@"height"] ?: @0,
+        @"pgensw": metadata[@"width"] ?: @0,
+        @"pgenszc": @{
+            @"gm": @NO,
+            @"iaig": @NO,
+            @"mpw": @"600.000000",
+            @"mth": @"100.000000",
+            @"mtw": @"100.000000",
+            @"s": @"1.000000",
+            @"st": @NO
+        }
+    };
+}
+
+static BOOL markTransferAsSticker(IMFileTransfer *transfer,
+                                  NSString *accessibilityLabel,
+                                  NSDictionary *metadata,
+                                  NSString **outErr) {
+    if (!transfer) {
+        if (outErr) *outErr = @"Missing transfer";
+        return NO;
+    }
+    if (![transfer respondsToSelector:@selector(setIsSticker:)]
+        || ![transfer respondsToSelector:@selector(setStickerUserInfo:)]
+        || ![transfer respondsToSelector:@selector(setAttributionInfo:)]) {
+        if (outErr) *outErr = @"Required IMFileTransfer sticker selectors unavailable";
+        return NO;
+    }
+    BOOL yes = YES;
+    NSMethodSignature *sig = [transfer methodSignatureForSelector:@selector(setIsSticker:)];
+    NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+    [inv setSelector:@selector(setIsSticker:)];
+    [inv setTarget:transfer];
+    [inv setArgument:&yes atIndex:2];
+    [inv invoke];
+    NSDictionary *stickerInfo = stickerUserInfo(metadata);
+    [transfer performSelector:@selector(setStickerUserInfo:) withObject:stickerInfo];
+    [transfer performSelector:@selector(setAttributionInfo:)
+                   withObject:stickerAttributionInfo(accessibilityLabel, metadata)];
+    setIntegerProperty(transfer, @selector(setPreviewGenerationState:), 1);
+    setIntegerProperty(transfer, @selector(setPreviewGenerationVersion:), 1);
+    return YES;
+}
+
 static NSAttributedString *annotateBodyForRichLink(NSAttributedString *body,
                                                    NSString *urlString) {
     if (!body.length || !urlString.length) return body;
@@ -4048,15 +4636,17 @@ static NSAttributedString *annotateBodyForRichLink(NSAttributedString *body,
 ///   3. Stage the source file in the IMD-managed attachments tree.
 ///   4. `retargetTransfer:toPath:` + `setLocalURL:` to point the transfer at
 ///      the staged copy.
-///   5. `registerTransferWithDaemon:` so the daemon picks it up.
+/// The caller registers the prepared transfer only after message construction
+/// succeeds, avoiding daemon-visible orphan transfers on builder failures.
 /// On failure returns `nil`; the caller emits the error.
-static void retargetPreparedTransfer(id ftc, IMFileTransfer *transfer,
+static BOOL retargetPreparedTransfer(id ftc, IMFileTransfer *transfer,
                                      NSString *transferGuid, NSString *path) {
-    if (!path.length) return;
+    if (!path.length) return NO;
     // Updating only `localURL` is not enough: IMFileTransferCenter keeps its
     // own guid -> path map, and imagent reads that map when daemon registration
     // happens.
-    if ([ftc respondsToSelector:@selector(retargetTransfer:toPath:)]) {
+    BOOL retargetedCenter = [ftc respondsToSelector:@selector(retargetTransfer:toPath:)];
+    if (retargetedCenter) {
         NSMethodSignature *rsig = [ftc methodSignatureForSelector:
             @selector(retargetTransfer:toPath:)];
         NSInvocation *rinv = [NSInvocation invocationWithMethodSignature:rsig];
@@ -4072,6 +4662,20 @@ static void retargetPreparedTransfer(id ftc, IMFileTransfer *transfer,
         [transfer performSelector:@selector(setLocalURL:)
                        withObject:[NSURL fileURLWithPath:path]];
     }
+    return retargetedCenter;
+}
+
+static BOOL pathsReferToSameFile(NSString *lhs, NSString *rhs) {
+    if (!lhs.length || !rhs.length) return NO;
+    if ([lhs.stringByStandardizingPath isEqualToString:rhs.stringByStandardizingPath]) {
+        return YES;
+    }
+    struct stat leftInfo = {0};
+    struct stat rightInfo = {0};
+    return stat(lhs.fileSystemRepresentation, &leftInfo) == 0
+        && stat(rhs.fileSystemRepresentation, &rightInfo) == 0
+        && leftInfo.st_dev == rightInfo.st_dev
+        && leftInfo.st_ino == rightInfo.st_ino;
 }
 
 static BOOL configurePreviewPayloadTransfer(IMFileTransfer *transfer,
@@ -4091,10 +4695,13 @@ static BOOL configurePreviewPayloadTransfer(IMFileTransfer *transfer,
     return YES;
 }
 
-static IMFileTransfer *prepareOutgoingTransferInternal(
-    NSURL *originalURL, NSString *filename, NSString *chatGuid,
-    BOOL hideAttachment, NSString *mimeType, BOOL registerWithDaemon,
-    NSString **outErr) {
+static IMFileTransfer *prepareOutgoingTransfer(NSURL *originalURL, NSString *filename,
+                                               NSString *chatGuid,
+                                               IMsgOutgoingTransferKind transferKind,
+                                               NSDictionary *transferMetadata,
+                                               NSString **outActivePath,
+                                               NSString **outErr) {
+    if (outActivePath) *outActivePath = originalURL.path;
     Class ftcClass = NSClassFromString(@"IMFileTransferCenter");
     if (!ftcClass) {
         if (outErr) *outErr = @"IMFileTransferCenter not available";
@@ -4109,8 +4716,11 @@ static IMFileTransfer *prepareOutgoingTransferInternal(
         if (outErr) *outErr = @"guidForNewOutgoingTransferWithLocalURL: unavailable";
         return nil;
     }
-    if (hideAttachment &&
-        ![ftc respondsToSelector:@selector(registerTransferWithDaemon:)]) {
+    if (![ftc respondsToSelector:@selector(transferForGUID:)]) {
+        if (outErr) *outErr = @"transferForGUID: unavailable";
+        return nil;
+    }
+    if (![ftc respondsToSelector:@selector(registerTransferWithDaemon:)]) {
         if (outErr) *outErr = @"registerTransferWithDaemon: unavailable";
         return nil;
     }
@@ -4123,10 +4733,8 @@ static IMFileTransfer *prepareOutgoingTransferInternal(
     }
     NSString *transferGuid = (NSString *)rawGuid;
 
-    IMFileTransfer *transfer = nil;
-    if ([ftc respondsToSelector:@selector(transferForGUID:)]) {
-        transfer = [ftc performSelector:@selector(transferForGUID:) withObject:transferGuid];
-    }
+    IMFileTransfer *transfer =
+        [ftc performSelector:@selector(transferForGUID:) withObject:transferGuid];
     if (!transfer) {
         if (outErr) *outErr = @"Could not resolve IMFileTransfer for guid";
         return nil;
@@ -4137,7 +4745,7 @@ static IMFileTransfer *prepareOutgoingTransferInternal(
     // passing the real chat GUID is what gives IMD enough context to choose the
     // per-chat attachment-store path that Messages/imagent will accept.
     Class pacClass = NSClassFromString(@"IMDPersistentAttachmentController");
-    if (pacClass && !hideAttachment) {
+    if (pacClass && transferKind != IMsgOutgoingTransferKindRichLinkPreview) {
         id pac = [pacClass performSelector:@selector(sharedInstance)];
         SEL pathSel = @selector(_persistentPathForTransfer:filename:highQuality:chatGUID:storeAtExternalPath:);
         if (pac && [pac respondsToSelector:pathSel]) {
@@ -4162,17 +4770,16 @@ static IMFileTransfer *prepareOutgoingTransferInternal(
             // Take a strong reference immediately — invocation returns an
             // unretained pointer that ARC may release before the next use.
             NSString *persistentPath = raw;
-            if (hideAttachment) {
-                debugLog(@"prepareOutgoingTransfer: hidden preview persistent path available=%d",
-                         persistentPath.length > 0);
-            } else {
-                debugLog(@"prepareOutgoingTransfer: persistentPath=%@ filename=%@",
-                         persistentPath ?: @"(nil)", fn);
-            }
+            debugLog(@"prepareOutgoingTransfer: persistentPath=%@ filename=%@",
+                     persistentPath ?: @"(nil)", fn);
 
             NSError *legacyErr = nil;
             BOOL legacyStaged = NO;
-            if (persistentPath.length) {
+            BOOL persistentMatchesSource = NO;
+            BOOL canRetargetSticker = transferKind != IMsgOutgoingTransferKindSticker
+                || ([ftc respondsToSelector:@selector(retargetTransfer:toPath:)]
+                    && pathIsWithinRoot(persistentPath, trustedMessagesAttachmentsRoot()));
+            if (persistentPath.length && canRetargetSticker) {
                 NSURL *persistentURL = [NSURL fileURLWithPath:persistentPath];
                 NSURL *parent = [persistentURL URLByDeletingLastPathComponent];
                 [[NSFileManager defaultManager] createDirectoryAtURL:parent
@@ -4180,17 +4787,35 @@ static IMFileTransfer *prepareOutgoingTransferInternal(
                                                           attributes:nil
                                                                error:&legacyErr];
                 if (!legacyErr) {
-                    // If the destination already exists (e.g., re-send of the
-                    // same file), nuke the stale copy so copyItem doesn't fail.
-                    if ([[NSFileManager defaultManager] fileExistsAtPath:persistentPath]) {
-                        [[NSFileManager defaultManager] removeItemAtURL:persistentURL error:NULL];
-                    }
-                    [[NSFileManager defaultManager] copyItemAtURL:originalURL
-                                                            toURL:persistentURL
-                                                            error:&legacyErr];
-                    if (!legacyErr) {
-                        retargetPreparedTransfer(ftc, transfer, transferGuid, persistentPath);
+                    persistentMatchesSource =
+                        pathsReferToSameFile(originalURL.path, persistentPath);
+                    if (persistentMatchesSource) {
                         legacyStaged = YES;
+                    } else {
+                        NSURL *temporaryURL = [parent URLByAppendingPathComponent:
+                            [NSString stringWithFormat:@".imsg-%@", NSUUID.UUID.UUIDString]];
+                        [[NSFileManager defaultManager] copyItemAtURL:originalURL
+                                                                toURL:temporaryURL
+                                                                error:&legacyErr];
+                        if (!legacyErr
+                            && rename(temporaryURL.path.fileSystemRepresentation,
+                                      persistentPath.fileSystemRepresentation) != 0) {
+                            legacyErr = [NSError errorWithDomain:NSPOSIXErrorDomain
+                                                           code:errno
+                                                       userInfo:nil];
+                        }
+                        if (legacyErr) {
+                            [[NSFileManager defaultManager]
+                                removeItemAtURL:temporaryURL error:NULL];
+                        }
+                    }
+                    if (!legacyErr) {
+                        BOOL retargeted = retargetPreparedTransfer(
+                            ftc, transfer, transferGuid, persistentPath);
+                        if (transferKind != IMsgOutgoingTransferKindSticker || retargeted) {
+                            if (outActivePath) *outActivePath = persistentPath;
+                            legacyStaged = YES;
+                        }
                     }
                 }
             }
@@ -4215,9 +4840,7 @@ static IMFileTransfer *prepareOutgoingTransferInternal(
                 // nil. So when the legacy retarget can't run, leave the
                 // transfer pointing at its original localURL and let
                 // registerTransferWithDaemon: pick it up directly.
-                if (hideAttachment) {
-                    debugLog(@"prepareOutgoingTransfer: hidden preview using staged source fallback");
-                } else if (legacyErr) {
+                if (legacyErr) {
                     debugLog(@"prepareOutgoingTransfer: legacy path %@ unusable (%@); "
                              @"keeping original localURL=%@ for registerTransferWithDaemon",
                              persistentPath ?: @"(nil)", legacyErr.localizedDescription,
@@ -4230,43 +4853,76 @@ static IMFileTransfer *prepareOutgoingTransferInternal(
         }
     }
 
-    if (hideAttachment) {
+    if (outActivePath) {
+        NSString *observedPath = nil;
+        if ([transfer respondsToSelector:@selector(localURL)]) {
+            id value = [transfer performSelector:@selector(localURL)];
+            if ([value isKindOfClass:[NSURL class]]) observedPath = [value path];
+        }
+        if (!observedPath.length && [transfer respondsToSelector:@selector(localPath)]) {
+            id value = [transfer performSelector:@selector(localPath)];
+            if ([value isKindOfClass:[NSString class]]) observedPath = value;
+        }
+        if (observedPath.length
+            && !pathsReferToSameFile(observedPath, originalURL.path)
+            && [[NSFileManager defaultManager] fileExistsAtPath:observedPath]) {
+            *outActivePath = observedPath;
+        }
+        NSString *activePath = *outActivePath;
+        if (activePath.length
+            && !pathsReferToSameFile(activePath, originalURL.path)
+            && [[NSFileManager defaultManager] fileExistsAtPath:activePath]
+            && !removeStickerFileSecurely(originalURL.path)) {
+            if (outErr) *outErr = @"Could not remove redundant sticker snapshot";
+            return nil;
+        }
+    }
+
+    if (transferKind == IMsgOutgoingTransferKindRichLinkPreview) {
+        NSString *mimeType = transferMetadata[@"mimeType"];
         if (!configurePreviewPayloadTransfer(transfer, mimeType, filename)) {
             if (outErr) *outErr = @"Hidden preview transfer selectors unavailable";
             return nil;
         }
     }
 
-    if (registerWithDaemon && !registerPreparedTransfer(transfer, outErr)) {
-        return nil;
+    if (transferKind == IMsgOutgoingTransferKindSticker) {
+        NSString *stickerErr = nil;
+        NSString *accessibilityLabel = transferMetadata[@"accessibilityLabel"];
+        if (!markTransferAsSticker(transfer, accessibilityLabel,
+                                   transferMetadata, &stickerErr)) {
+            if (outErr) *outErr = stickerErr ?: @"Could not mark transfer as sticker";
+            return nil;
+        }
     }
-    return transfer;
-}
 
-static IMFileTransfer *prepareOutgoingTransfer(NSURL *originalURL, NSString *filename,
-                                               NSString *chatGuid, BOOL hideAttachment,
-                                               NSString *mimeType, NSString **outErr) {
-    return prepareOutgoingTransferInternal(originalURL, filename, chatGuid,
-                                           hideAttachment, mimeType, YES, outErr);
+    return transfer;
 }
 
 static IMFileTransfer *prepareUnregisteredOutgoingTransfer(
     NSURL *originalURL, NSString *filename, NSString *chatGuid,
     BOOL hideAttachment, NSString *mimeType, NSString **outErr) {
-    return prepareOutgoingTransferInternal(originalURL, filename, chatGuid,
-                                           hideAttachment, mimeType, NO, outErr);
+    IMsgOutgoingTransferKind kind = hideAttachment
+        ? IMsgOutgoingTransferKindRichLinkPreview
+        : IMsgOutgoingTransferKindAttachment;
+    NSDictionary *metadata = mimeType.length ? @{ @"mimeType": mimeType } : nil;
+    return prepareOutgoingTransfer(originalURL, filename, chatGuid, kind,
+                                   metadata, NULL, outErr);
 }
 
 static BOOL registerPreparedTransfer(IMFileTransfer *transfer, NSString **outErr) {
     NSString *transferGuid = [transfer guid];
-    Class ftcClass = NSClassFromString(@"IMFileTransferCenter");
-    id ftc = ftcClass ? [ftcClass performSelector:@selector(sharedInstance)] : nil;
-    if (!transferGuid.length || !ftc ||
-        ![ftc respondsToSelector:@selector(registerTransferWithDaemon:)]) {
+    if (!transferGuid.length) {
+        if (outErr) *outErr = @"Prepared transfer has no guid";
+        return NO;
+    }
+    Class centerClass = NSClassFromString(@"IMFileTransferCenter");
+    id center = centerClass ? [centerClass performSelector:@selector(sharedInstance)] : nil;
+    if (!center || ![center respondsToSelector:@selector(registerTransferWithDaemon:)]) {
         if (outErr) *outErr = @"registerTransferWithDaemon: unavailable";
         return NO;
     }
-    [ftc performSelector:@selector(registerTransferWithDaemon:) withObject:transferGuid];
+    [center performSelector:@selector(registerTransferWithDaemon:) withObject:transferGuid];
     return YES;
 }
 
@@ -4319,8 +4975,9 @@ static NSDictionary *handleSendAttachment(NSInteger requestId, NSDictionary *par
 
     @try {
         NSString *prepErr = nil;
-        IMFileTransfer *transfer = prepareOutgoingTransfer(fileURL, filename, chatGuid,
-                                                           NO, nil, &prepErr);
+        IMFileTransfer *transfer = prepareOutgoingTransfer(
+            fileURL, filename, chatGuid, IMsgOutgoingTransferKindAttachment,
+            nil, NULL, &prepErr);
         if (!transfer) {
             return errorResponse(requestId,
                 prepErr.length ? prepErr : @"Could not register attachment transfer");
@@ -4381,6 +5038,11 @@ static NSDictionary *handleSendAttachment(NSInteger requestId, NSDictionary *par
             [imMessage performSelector:@selector(setThreadIdentifier:)
                             withObject:threadIdentifier];
         }
+        NSString *registerErr = nil;
+        if (!registerPreparedTransfer(transfer, &registerErr)) {
+            return errorResponse(requestId,
+                registerErr.length ? registerErr : @"Could not register attachment transfer");
+        }
         dispatchIMMessageInChat(chat, imMessage, threadIdentifier, parentItem);
         NSString *guid = lastSentMessageGuid(chat);
         return successResponse(requestId, @{
@@ -4392,6 +5054,238 @@ static NSDictionary *handleSendAttachment(NSInteger requestId, NSDictionary *par
     } @catch (NSException *exception) {
         return errorResponse(requestId,
             [NSString stringWithFormat:@"send-attachment failed: %@", exception.reason]);
+    }
+}
+
+/// `send-sticker`: registers an outgoing file transfer and marks the transfer
+/// as sticker-attributed before dispatch. A selectedMessageGuid attaches the
+/// sticker to a message bubble using the same association path as tapbacks.
+static void cleanupPreparedStickerPaths(NSString *snapshotPath,
+                                        NSString *activePath) {
+    if (activePath.length) removeStickerTransferFileSecurely(activePath);
+    if (snapshotPath.length
+        && ![snapshotPath.stringByStandardizingPath
+            isEqualToString:activePath.stringByStandardizingPath]) {
+        removeStickerFileSecurely(snapshotPath);
+    }
+}
+
+static NSDictionary *handleSendSticker(NSInteger requestId, NSDictionary *params) {
+    NSString *chatGuid = params[@"chatGuid"];
+    NSString *filePath = params[@"filePath"];
+    NSString *contentHash = params[@"contentHash"];
+    NSString *accessibilityLabel = params[@"accessibilityLabel"];
+    NSNumber *pixelWidth = params[@"pixelWidth"];
+    NSNumber *pixelHeight = params[@"pixelHeight"];
+    NSString *rawSelectedMessageGuid = params[@"selectedMessageGuid"];
+    NSNumber *partIndexNum = params[@"targetPartIndex"];
+    if (![chatGuid isKindOfClass:[NSString class]]
+        || ![filePath isKindOfClass:[NSString class]]
+        || ![contentHash isKindOfClass:[NSString class]]
+        || ![accessibilityLabel isKindOfClass:[NSString class]]) {
+        return errorResponse(requestId,
+            @"chatGuid, filePath, contentHash, and accessibilityLabel must be strings");
+    }
+    if (![pixelWidth isKindOfClass:[NSNumber class]]
+        || ![pixelHeight isKindOfClass:[NSNumber class]]
+        || CFGetTypeID((__bridge CFTypeRef)pixelWidth) == CFBooleanGetTypeID()
+        || CFGetTypeID((__bridge CFTypeRef)pixelHeight) == CFBooleanGetTypeID()
+        || pixelWidth.doubleValue != (double)pixelWidth.integerValue
+        || pixelHeight.doubleValue != (double)pixelHeight.integerValue) {
+        return errorResponse(requestId, @"pixelWidth and pixelHeight must be integers");
+    }
+    if (rawSelectedMessageGuid
+        && ![rawSelectedMessageGuid isKindOfClass:[NSString class]]) {
+        return errorResponse(requestId, @"selectedMessageGuid must be a string");
+    }
+    if (partIndexNum && ![partIndexNum isKindOfClass:[NSNumber class]]) {
+        return errorResponse(requestId, @"targetPartIndex must be an integer");
+    }
+    if (partIndexNum
+        && (CFGetTypeID((__bridge CFTypeRef)partIndexNum) == CFBooleanGetTypeID()
+            || partIndexNum.doubleValue != (double)partIndexNum.integerValue)) {
+        return errorResponse(requestId, @"targetPartIndex must be an integer");
+    }
+    NSInteger targetPartIndex = partIndexNum ? [partIndexNum integerValue] : 0;
+
+    if (!chatGuid.length) return errorResponse(requestId, @"Missing chatGuid");
+    if (!filePath.length) return errorResponse(requestId, @"Missing filePath");
+    if (targetPartIndex < 0) {
+        return errorResponse(requestId, @"targetPartIndex must be non-negative");
+    }
+    NSString *selectedMessageGuid = rawSelectedMessageGuid;
+    if ([rawSelectedMessageGuid hasPrefix:@"p:"]) {
+        NSRange slash = [rawSelectedMessageGuid rangeOfString:@"/"];
+        if (slash.location == NSNotFound || slash.location <= 2
+            || slash.location + 1 >= rawSelectedMessageGuid.length) {
+            return errorResponse(requestId, @"Malformed sticker target");
+        }
+        NSString *embeddedPartText = [rawSelectedMessageGuid substringWithRange:
+            NSMakeRange(2, slash.location - 2)];
+        if ([embeddedPartText rangeOfCharacterFromSet:
+                [[NSCharacterSet decimalDigitCharacterSet] invertedSet]].location
+            != NSNotFound) {
+            return errorResponse(requestId, @"Malformed sticker target part");
+        }
+        NSScanner *scanner = [NSScanner scannerWithString:embeddedPartText];
+        NSInteger embeddedPart = -1;
+        if (![scanner scanInteger:&embeddedPart] || !scanner.isAtEnd || embeddedPart < 0) {
+            return errorResponse(requestId, @"Malformed sticker target part");
+        }
+        if (partIndexNum && targetPartIndex != embeddedPart) {
+            return errorResponse(requestId, @"Conflicting sticker target parts");
+        }
+        targetPartIndex = embeddedPart;
+        selectedMessageGuid = [rawSelectedMessageGuid substringFromIndex:slash.location + 1];
+    }
+    if ([selectedMessageGuid containsString:@"/"]) {
+        return errorResponse(requestId, @"Malformed sticker target guid");
+    }
+    if (!selectedMessageGuid.length && targetPartIndex != 0) {
+        return errorResponse(requestId, @"targetPartIndex requires selectedMessageGuid");
+    }
+    if (!stickerAttachmentMessageInitializerAvailable()) {
+        return errorResponse(requestId,
+            @"Sticker attachment message initializer unavailable");
+    }
+    if (selectedMessageGuid.length
+        && !stickerAssociatedMessageInitializerAvailable()) {
+        return errorResponse(requestId,
+            @"Sticker associated-message initializer unavailable");
+    }
+    if (!stickerTransferSelectorsAvailable()) {
+        return errorResponse(requestId, @"Required sticker transfer selectors unavailable");
+    }
+
+    NSString *metadataErr = nil;
+    NSDictionary *assetMetadata = stickerAssetMetadata(filePath, &metadataErr);
+    if (!assetMetadata) {
+        return errorResponse(requestId,
+            metadataErr.length ? metadataErr : @"Invalid sticker image");
+    }
+    if (![assetMetadata[@"hash"] isEqualToString:contentHash.lowercaseString]
+        || ![assetMetadata[@"width"] isEqualToNumber:pixelWidth]
+        || ![assetMetadata[@"height"] isEqualToNumber:pixelHeight]) {
+        return errorResponse(requestId, @"Sticker metadata does not match staged bytes");
+    }
+    NSMutableDictionary *verifiedMetadata = [assetMetadata mutableCopy];
+    verifiedMetadata[@"accessibilityLabel"] = accessibilityLabel;
+
+    IMChat *chat = resolveChatByGuid(chatGuid);
+    if (!chat) {
+        return errorResponse(requestId,
+            [NSString stringWithFormat:@"Chat not found: %@", chatGuid]);
+    }
+    NSString *observedService = serviceNameForChat(chat, chatGuid);
+    if (![observedService isEqualToString:@"iMessage"]
+        && ![observedService isEqualToString:@"iMessageLite"]) {
+        return errorResponse(requestId, @"Stickers require an iMessage chat");
+    }
+    if (![chat respondsToSelector:@selector(sendMessage:)]) {
+        return errorResponse(requestId, @"Chat send selector unavailable");
+    }
+    NSString *resolvedChatGuid = [chat respondsToSelector:@selector(guid)]
+        ? [chat performSelector:@selector(guid)] : chatGuid;
+
+    id parentChatItem = nil;
+    NSRange targetRange = NSMakeRange(0, 1);
+    if (selectedMessageGuid.length) {
+        if (!stickerMessageBelongsToChat(chat, selectedMessageGuid)) {
+            return errorResponse(requestId,
+                @"Sticker target does not belong to the selected chat");
+        }
+        parentChatItem = findMessagePart(chat, selectedMessageGuid, targetPartIndex);
+        if (!parentChatItem
+            || ![parentChatItem respondsToSelector:@selector(index)]
+            || [(IMMessagePartChatItem *)parentChatItem index] != targetPartIndex
+            || ![parentChatItem respondsToSelector:@selector(messagePartRange)]) {
+            return errorResponse(requestId, @"Sticker target message part not found");
+        }
+        targetRange = [(IMMessagePartChatItem *)parentChatItem messagePartRange];
+        if (targetRange.length == 0) {
+            return errorResponse(requestId, @"Sticker target message part has an empty range");
+        }
+    }
+
+    NSString *snapshotErr = nil;
+    NSString *snapshotPath = writeStickerSnapshot(assetMetadata, filePath, &snapshotErr);
+    if (!snapshotPath.length) {
+        return errorResponse(requestId,
+            snapshotErr.length ? snapshotErr : @"Could not snapshot sticker image");
+    }
+    if (!removeStickerFileSecurely(filePath)) {
+        removeStickerFileSecurely(snapshotPath);
+        return errorResponse(requestId, @"Could not remove sticker handoff file");
+    }
+    [verifiedMetadata removeObjectForKey:@"data"];
+    verifiedMetadata[@"filename"] = snapshotPath.lastPathComponent;
+    NSURL *fileURL = [NSURL fileURLWithPath:snapshotPath];
+    NSString *filename = [fileURL lastPathComponent];
+
+    BOOL dispatchAttempted = NO;
+    NSString *activePath = snapshotPath;
+    @try {
+        NSString *prepErr = nil;
+        IMFileTransfer *transfer = prepareOutgoingTransfer(
+            fileURL, filename, resolvedChatGuid, IMsgOutgoingTransferKindSticker,
+            verifiedMetadata, &activePath, &prepErr);
+        if (!transfer) {
+            cleanupPreparedStickerPaths(snapshotPath, activePath);
+            return errorResponse(requestId,
+                prepErr.length ? prepErr : @"Could not register sticker transfer");
+        }
+        NSString *transferGuid = [transfer guid];
+        if (!transferGuid.length) {
+            cleanupPreparedStickerPaths(snapshotPath, activePath);
+            return errorResponse(requestId, @"Sticker transfer registered without guid");
+        }
+
+        // Target and outgoing attachment part indexes are different domains.
+        // A sticker message contains one outgoing attachment, always part 0.
+        NSAttributedString *body = buildAttachmentAttributed(transferGuid, filename, 0);
+        long long associatedType = selectedMessageGuid.length ? 1000 : 0;
+        NSString *associatedRef = selectedMessageGuid;
+        if (selectedMessageGuid.length) {
+            associatedRef = [NSString stringWithFormat:@"p:%ld/%@",
+                                                        (long)targetPartIndex,
+                                                        selectedMessageGuid];
+        }
+        NSDictionary *summaryInfo = selectedMessageGuid.length
+            ? @{@"eogcd": @3, @"ust": @YES}
+            : nil;
+        clearThreadContextForChat(chat, nil);
+
+        id imMessage = buildIMMessage(body, nil, nil, nil,
+                                      nil,
+                                      associatedRef, associatedType,
+                                      targetRange, summaryInfo,
+                                      @[transferGuid], NO, NO);
+        if (!imMessage) {
+            cleanupPreparedStickerPaths(snapshotPath, activePath);
+            return errorResponse(requestId, @"Could not build sticker IMMessage");
+        }
+        NSString *registerErr = nil;
+        if (!registerPreparedTransfer(transfer, &registerErr)) {
+            cleanupPreparedStickerPaths(snapshotPath, activePath);
+            return errorResponse(requestId,
+                registerErr.length ? registerErr : @"Could not register sticker transfer");
+        }
+        dispatchAttempted = YES;
+        [chat performSelector:@selector(sendMessage:) withObject:imMessage];
+        NSString *guid = lastSentMessageGuid(chat);
+        return successResponse(requestId, @{
+            @"chatGuid": chatGuid,
+            @"messageGuid": guid ?: @"",
+            @"transferGuid": transferGuid,
+            @"selectedMessageGuid": selectedMessageGuid ?: @"",
+            @"targetPartIndex": @(targetPartIndex)
+        });
+    } @catch (NSException *exception) {
+        if (!dispatchAttempted) {
+            cleanupPreparedStickerPaths(snapshotPath, activePath);
+        }
+        return errorResponse(requestId,
+            [NSString stringWithFormat:@"send-sticker failed: %@", exception.reason]);
     }
 }
 
@@ -4978,11 +5872,17 @@ static NSDictionary *handleUpdateGroupPhoto(NSInteger requestId, NSDictionary *p
         }
         NSURL *fileURL = [NSURL fileURLWithPath:filePath];
         NSString *prepErr = nil;
-        IMFileTransfer *transfer = prepareOutgoingTransfer(fileURL,
-            [fileURL lastPathComponent], chatGuid, NO, nil, &prepErr);
+        IMFileTransfer *transfer = prepareOutgoingTransfer(
+            fileURL, [fileURL lastPathComponent], chatGuid,
+            IMsgOutgoingTransferKindAttachment, nil, NULL, &prepErr);
         if (!transfer || ![transfer guid].length) {
             return errorResponse(requestId,
                 prepErr.length ? prepErr : @"Could not prepare group-photo transfer");
+        }
+        NSString *registerErr = nil;
+        if (!registerPreparedTransfer(transfer, &registerErr)) {
+            return errorResponse(requestId,
+                registerErr.length ? registerErr : @"Could not register group-photo transfer");
         }
         [chat performSelector:sel withObject:[transfer guid]];
         return successResponse(requestId, @{
@@ -5294,6 +6194,7 @@ static NSDictionary* dispatchAction(NSInteger legacyId, NSString *action,
     }
     if ([action isEqualToString:@"send-multipart"]) return handleSendMultipart(legacyId, params);
     if ([action isEqualToString:@"send-attachment"]) return handleSendAttachment(legacyId, params);
+    if ([action isEqualToString:@"send-sticker"]) return handleSendSticker(legacyId, params);
     if ([action isEqualToString:@"send-poll"]) return handleSendPoll(legacyId, params);
     if ([action isEqualToString:@"send-poll-vote"]) return handleSendPollVote(legacyId, params);
     if ([action isEqualToString:@"send-poll-unvote"]) return handleSendPollUnvote(legacyId, params);
