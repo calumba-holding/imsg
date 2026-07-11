@@ -9,6 +9,7 @@ struct IMsgBridgeProtocolTests {
   func actionRawValuesMatchDylibVocabulary() {
     #expect(BridgeAction.sendMessage.rawValue == "send-message")
     #expect(BridgeAction.sendPoll.rawValue == "send-poll")
+    #expect(BridgeAction.sendPollUnvote.rawValue == "send-poll-unvote")
     #expect(BridgeAction.sendReaction.rawValue == "send-reaction")
     #expect(BridgeAction.editMessage.rawValue == "edit-message")
     #expect(BridgeAction.unsendMessage.rawValue == "unsend-message")
@@ -94,6 +95,8 @@ struct IMsgBridgeProtocolTests {
       .sendMultipart,
       .sendAttachment,
       .sendPoll,
+      .sendPollVote,
+      .sendPollUnvote,
       .sendReaction,
       .createChat,
     ] {

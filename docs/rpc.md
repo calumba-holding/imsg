@@ -268,6 +268,14 @@ Response:
 {"ok":true,"event":"imessage.poll.created","guid":"...","message_id":"...","poll":{"kind":"created","event":"imessage.poll.created","question":"Dinner?","options":[{"id":"...","text":"Pizza"},{"id":"...","text":"Sushi"}]}}
 ```
 
+`poll.vote` casts a native vote after validating the poll and option against local history.
+`polls.unvote` removes a selection with the same poll/option parameters:
+
+```json
+{"jsonrpc":"2.0","id":"vote","method":"poll.vote","params":{"chat_id":42,"poll_guid":"POLL-GUID","option_id":"OPTION-UUID"}}
+{"jsonrpc":"2.0","id":"unvote","method":"polls.unvote","params":{"chat_id":42,"poll_guid":"POLL-GUID","option_id":"OPTION-UUID"}}
+```
+
 `messages.poll.send` is accepted as an alias for `poll.send`. The caption echo is deliberately best-effort: if the poll is created but the follow-up caption send fails, the RPC still returns the poll result to avoid retrying and creating a duplicate poll.
 
 ## Objects
