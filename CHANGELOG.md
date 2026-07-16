@@ -2,6 +2,9 @@
 
 ## 0.13.1 - Unreleased
 
+### Attachments
+- fix: bound external attachment converters (ffmpeg) to a 60-second timeout with full process-tree cleanup so hung conversions cannot block metadata resolution forever (#176, thanks @SebTardif).
+
 ## 0.13.0 - 2026-07-11
 
 ### Read Commands
