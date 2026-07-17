@@ -1,9 +1,19 @@
 # Changelog
 
-## 0.13.1 - Unreleased
+## 0.13.1 - 2026-07-17
+
+### Highlights
+- Attachment conversion now times out safely and kills stalled converter process trees instead of blocking metadata resolution indefinitely.
+- Linux read-only builds work again after the converter hardening, with current Commander and phone-number metadata dependencies.
 
 ### Attachments
-- fix: bound external attachment converters (ffmpeg) to a 60-second timeout with full process-tree cleanup so hung conversions cannot block metadata resolution forever (#176, thanks @SebTardif).
+- fix: bound external attachment converters (ffmpeg) to a 60-second monotonic timeout with full process-tree cleanup so hung conversions cannot block metadata resolution forever (#176, thanks @SebTardif).
+
+### Linux
+- fix: restore Linux builds by importing Glibc instead of Darwin on supported Linux hosts (#182, thanks @omarshahine).
+
+### Dependencies
+- chore: update Commander to 0.2.4 and PhoneNumberKit to 5.0.5, including metadata/9.0.35 (#183).
 
 ## 0.13.0 - 2026-07-11
 
