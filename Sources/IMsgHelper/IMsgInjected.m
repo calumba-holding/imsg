@@ -5775,19 +5775,20 @@ static NSDictionary *handleAddParticipant(NSInteger requestId, NSDictionary *par
 
     Class hrClass = NSClassFromString(@"IMHandleRegistrar");
     id hr = hrClass ? [hrClass performSelector:@selector(sharedInstance)] : nil;
-    id handle = (hr && [hr respondsToSelector:@selector(IMHandleWithID:)])
-        ? [hr performSelector:@selector(IMHandleWithID:) withObject:address]
-        : nil;
+    // Match chat-create's fallback-capable iMessage handle lookup.
+    id handle = vendIMHandle(hr, address, @"iMessage", YES);
     if (!handle) return errorResponse(requestId, @"Could not vend handle");
 
     @try {
-        // BB-verified macOS 11+ selector: `inviteParticipantsToiMessageChat:reason:`.
-        // `addParticipantsToiMessageChat:reason:` (what we used before) is not
-        // declared on IMChat; respondsToSelector returned NO and the call
-        // failed with "selector not available".
-        SEL sel = @selector(inviteParticipantsToiMessageChat:reason:);
-        if (![chat respondsToSelector:sel]) {
-            return errorResponse(requestId, @"inviteParticipantsToiMessageChat:reason: not available");
+        // macOS 26 renamed this selector; retain the older spelling as fallback.
+        SEL sel = 0;
+        for (NSString *name in @[@"inviteParticipants:reason:",
+                                 @"inviteParticipantsToiMessageChat:reason:"]) {
+            SEL cand = NSSelectorFromString(name);
+            if ([chat respondsToSelector:cand]) { sel = cand; break; }
+        }
+        if (!sel) {
+            return errorResponse(requestId, @"no participant-invite selector available on this IMChat");
         }
         NSMethodSignature *sig = [chat methodSignatureForSelector:sel];
         NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
@@ -5823,9 +5824,15 @@ static NSDictionary *handleRemoveParticipant(NSInteger requestId, NSDictionary *
     if (!targetHandle) return errorResponse(requestId, @"Participant not found on chat");
 
     @try {
-        SEL sel = @selector(removeParticipantsFromiMessageChat:reason:);
-        if (![chat respondsToSelector:sel]) {
-            return errorResponse(requestId, @"removeParticipantsFromiMessageChat:reason: not available");
+        // macOS 26 renamed this selector; retain the older spelling as fallback.
+        SEL sel = 0;
+        for (NSString *name in @[@"removeParticipants:reason:",
+                                 @"removeParticipantsFromiMessageChat:reason:"]) {
+            SEL cand = NSSelectorFromString(name);
+            if ([chat respondsToSelector:cand]) { sel = cand; break; }
+        }
+        if (!sel) {
+            return errorResponse(requestId, @"no participant-remove selector available on this IMChat");
         }
         NSMethodSignature *sig = [chat methodSignatureForSelector:sel];
         NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
