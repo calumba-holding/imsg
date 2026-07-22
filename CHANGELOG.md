@@ -1,14 +1,17 @@
 # Changelog
 
-## 0.13.2 - Unreleased
+## 0.13.2 - 2026-07-21
 
-### Advanced IMCore
-- fix: restore group participant add/remove on macOS 26 by using fallback-capable handle lookup and probing both current and legacy IMChat selectors (#185, thanks @oficiallyAkshay).
+### Highlights
+- History and JSON output are substantially faster on busy chats: URL-preview coalescing no longer sorts per preview, reactions are collected in one pass without losing cross-chat associations, and timestamps reuse a concurrency-safe formatter (thanks @zachwinter).
 
 ### Performance
 - perf: avoid a temporary SQLite sort for every URL-preview lookup in history (#191, thanks @zachwinter).
 - perf: fetch history reactions in one pass while preserving cross-chat reaction associations (#189, thanks @zachwinter).
 - perf: reuse ISO-8601 date formatting safely across high-volume output (#193, thanks @zachwinter).
+
+### Advanced IMCore
+- fix: restore group participant add/remove on macOS 26 by using fallback-capable handle lookup and probing both current and legacy IMChat selectors (#185, thanks @oficiallyAkshay).
 
 ## 0.13.1 - 2026-07-17
 
