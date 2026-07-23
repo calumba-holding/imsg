@@ -1,6 +1,9 @@
 # Changelog
 
-## 0.13.3 - Unreleased
+## 0.13.3 - 2026-07-23
+
+### Highlights
+- macOS 26/27 bridge compatibility is restored for typing/account diagnostics and message editing after IMCore selector drift (thanks @sethdford).
 
 ### Advanced IMCore
 - fix: restore typing/account diagnostics and message editing on macOS 26 with current IMCore selectors (#194, thanks @sethdford).
