@@ -8,6 +8,9 @@
 ### Reliability
 - fix: bound osascript send, reaction, and helper-process waits with process-tree cleanup so stalled subprocesses cannot hang CLI or RPC work (#197, thanks @SebTardif).
 
+### Native Polls
+- fix: render complete native poll selection snapshots in human-readable history and watch output while preserving the existing poll-vote prefix (#198, thanks @clawSean).
+
 ## 0.13.4 - 2026-07-27
 
 ### Highlights
