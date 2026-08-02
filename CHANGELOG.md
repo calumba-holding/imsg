@@ -2,6 +2,9 @@
 
 ## 0.13.5 - Unreleased
 
+### JSON-RPC
+- fix: let non-interactive RPC startup proceed without a Contacts prompt while rejecting ambiguous name targets when Contacts is unavailable (#186, #187, thanks @SebTardif).
+
 ## 0.13.4 - 2026-07-27
 
 ### Highlights
