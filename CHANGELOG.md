@@ -4,6 +4,7 @@
 
 ### JSON-RPC
 - fix: let non-interactive RPC startup proceed without a Contacts prompt while rejecting ambiguous name targets when Contacts is unavailable (#186, #187, thanks @SebTardif).
+- fix: fail vanished bridge queue requests immediately without treating an unobserved claim as safe to retry, avoiding long stalls and duplicate sends (#199, thanks @omarshahine).
 
 ### Reliability
 - fix: bound osascript send, reaction, and helper-process waits with process-tree cleanup so stalled subprocesses cannot hang CLI or RPC work (#197, thanks @SebTardif).
