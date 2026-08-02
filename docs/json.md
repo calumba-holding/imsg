@@ -40,7 +40,7 @@ Returned by `imsg history`, `imsg search`, `imsg watch`, and the JSON-RPC `messa
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `id` | int | rowid. Use as the `--since-rowid` cursor in watch. |
+| `id` | int | Database-instance-scoped rowid. Use as the `--since-rowid` cursor in watch, but discard saved cursors after replacing or restoring the Messages database. |
 | `chat_id` | int | Always present. Preferred routing handle. |
 | `chat_identifier` | string | Portable handle. |
 | `chat_guid` | string | Portable GUID. |
@@ -121,7 +121,9 @@ Live watch calls do not delay the text message waiting for a preview. If the pre
 
 ### Reaction extensions
 
-Present on `imsg watch --reactions` events:
+Present on standalone reaction rows emitted by `imsg watch --reactions`,
+`watch.subscribe` with `include_reactions: true`, and `messages.after` with
+`include_reactions: true`:
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -131,7 +133,10 @@ Present on `imsg watch --reactions` events:
 | `is_reaction_add` | bool | `true` for add, `false` for remove. |
 | `reacted_to_guid` | string | The message guid this tapback targets. |
 
-`history` deliberately hides reaction rows so they don't duplicate the reacted message. Reaction events only surface in the live watch stream.
+`history` deliberately hides standalone reaction rows so they don't duplicate
+the reacted message. Live watch surfaces emit them only when reactions are
+enabled; `messages.after` includes them in ROWID order only when
+`include_reactions` is `true`.
 
 ### Native poll extension
 

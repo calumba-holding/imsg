@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.0 - Unreleased
+
+### JSON-RPC
+- feat: add bounded `messages.after` pagination with authoritative database-instance-scoped ROWID cursors, cross-chat catchup, and optional standalone reaction events (#200, #201, thanks @vincentkoc).
+
 ## 0.13.5 - Unreleased
 
 ### JSON-RPC
