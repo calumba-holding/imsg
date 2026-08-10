@@ -101,6 +101,7 @@ private final class WatchState: @unchecked Sendable {
 
   private var cursor: Int64
   private var resumeAfterRowID: Int64
+  private var urlBalloonDedupe = URLBalloonDedupeState()
   #if os(macOS)
     private struct FileWatchIdentity: Equatable {
       let device: UInt64
@@ -272,7 +273,8 @@ private final class WatchState: @unchecked Sendable {
         afterRowID: cursor,
         chatID: chatID,
         limit: configuration.batchLimit,
-        includeReactions: configuration.includeReactions
+        includeReactions: configuration.includeReactions,
+        dedupeState: &urlBalloonDedupe
       )
       for message in batch.messages {
         switch yieldDecision(for: message) {
