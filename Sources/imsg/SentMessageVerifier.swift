@@ -2,6 +2,13 @@ import Foundation
 import IMsgCore
 
 enum SentMessageVerifier {
+  typealias Resolver = (
+    _ store: MessageStore,
+    _ options: MessageSendOptions,
+    _ chatID: Int64?,
+    _ sentAt: Date
+  ) async throws -> Message?
+
   static func resolveSentMessage(
     store: MessageStore,
     options: MessageSendOptions,
@@ -14,8 +21,9 @@ enum SentMessageVerifier {
     let deadline = Date().addingTimeInterval(8)
     repeat {
       if Task.isCancelled { return nil }
-      if let message = try store.latestSentMessage(
-        matchingText: options.text,
+      if let message = try resolveSentMessageCandidate(
+        store: store,
+        options: options,
         chatID: chatID,
         since: lowerBound
       ) {
@@ -24,6 +32,33 @@ enum SentMessageVerifier {
       try await Task.sleep(nanoseconds: 100_000_000)
     } while Date() < deadline
     return nil
+  }
+
+  static func resolveSentMessageCandidate(
+    store: MessageStore,
+    options: MessageSendOptions,
+    chatID: Int64?,
+    since date: Date
+  ) throws -> Message? {
+    let verificationChatID: Int64?
+    if let chatID {
+      verificationChatID = chatID
+    } else if !options.recipient.isEmpty {
+      verificationChatID = try ChatTargetResolver.existingDirectChat(
+        store: store,
+        recipient: options.recipient,
+        service: options.service
+      )?.id
+    } else {
+      verificationChatID = nil
+    }
+    guard let verificationChatID else { return nil }
+
+    return try store.latestSentMessage(
+      matchingText: options.text,
+      chatID: verificationChatID,
+      since: date
+    )
   }
 
   static func throwIfMisroutedChatSend(
@@ -43,8 +78,33 @@ enum SentMessageVerifier {
       return
     }
 
-    throw IMsgError.appleScriptFailure(
-      "Messages accepted the chat send but wrote an unjoined empty outgoing row (\(rowID)); delivery to the target chat was not confirmed"
+    throw DeliveryFailure(
+      disposition: .mayHaveCompleted,
+      transport: .appleScript,
+      operation: "send",
+      detail:
+        "Messages accepted the chat send but wrote an unjoined empty outgoing row (\(rowID)); delivery to the target chat was not confirmed"
+    )
+  }
+
+  static func verifyAppleScriptSend(
+    store: MessageStore,
+    options: MessageSendOptions,
+    chatID: Int64?,
+    sentAt: Date,
+    resolve: Resolver
+  ) async throws -> Message? {
+    let message = try? await resolve(store, options, chatID, sentAt)
+    if let message { return message }
+
+    try throwIfMisroutedChatSend(store: store, options: options, sentAt: sentAt)
+    guard !options.text.isEmpty else { return nil }
+    throw DeliveryFailure(
+      disposition: .mayHaveCompleted,
+      transport: .appleScript,
+      operation: "send",
+      detail:
+        "Messages automation returned success, but no matching outgoing text row was observed within 8 seconds."
     )
   }
 }
