@@ -418,8 +418,8 @@ func rpcTypingResolvesExistingAnyPrefixChat() async throws {
     store: store,
     verbose: false,
     output: output,
-    startTyping: { startedIdentifier = $0 },
-    stopTyping: { _ in }
+    isBridgeReady: { false },
+    startTyping: { startedIdentifier = $0 }
   )
 
   let line = #"{"jsonrpc":"2.0","id":"3typing","method":"typing","params":{"to":"+123"}}"#
