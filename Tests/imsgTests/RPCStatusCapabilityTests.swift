@@ -21,7 +21,7 @@ func rpcStatusCalculatesDynamicMethodsAcrossResourceStates() async throws {
   let bothMethods = rpcStatusMethods(both)
   #expect(
     bothMethods.isSuperset(of: [
-      "chats.list", "send.sticker", "poll.send", "poll.vote",
+      "chats.list", "messages.search", "send.multipart", "send.sticker", "poll.send", "poll.vote",
       "typing", "read", "message.edit", "message.unsend", "group.rename",
     ]))
   let readyBridge = try #require(both["bridge"] as? [String: Any])
@@ -68,12 +68,14 @@ func rpcStatusCalculatesDynamicMethodsAcrossResourceStates() async throws {
   #expect(bridgeOnlyMethods.contains("group.rename"))
   #expect(bridgeOnlyMethods.contains("poll.send"))
   #expect(!bridgeOnlyMethods.contains("chats.list"))
+  #expect(!bridgeOnlyMethods.contains("send.multipart"))
   #expect(!bridgeOnlyMethods.contains("send.sticker"))
   #expect(!bridgeOnlyMethods.contains("poll.vote"))
 
   var limitedSelectors = fullRPCStatusBridgeSelectors()
   limitedSelectors["stickerSend"] = false
   limitedSelectors["editMessageItem"] = false
+  limitedSelectors["sendMultipart"] = false
   let limitedOutput = TestRPCOutput()
   let limitedServer = RPCServer(
     store: store,
@@ -89,6 +91,7 @@ func rpcStatusCalculatesDynamicMethodsAcrossResourceStates() async throws {
   let limitedMethods = rpcStatusMethods(try rpcStatusResult(limitedOutput))
   #expect(!limitedMethods.contains("send.sticker"))
   #expect(!limitedMethods.contains("message.edit"))
+  #expect(!limitedMethods.contains("send.multipart"))
   #expect(limitedMethods.contains("poll.send"))
 
   let ignoredAllowlistOutput = TestRPCOutput()
