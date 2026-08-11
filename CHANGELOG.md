@@ -1,9 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.14.1 - 2026-08-11
 
-### Read Commands
-- fix: search decoded attributed message bodies when the plain text column is empty (#223, thanks @lincicomb).
+**Highlight:** search now finds messages whose text lives only in the rich-text
+body — previously these were silently invisible to every query.
+
+### Fixes
+
+- Search messages whose body exists only in `attributedBody` (rich text): the SQL prefilter excluded them before decoding could run, so such messages could never match. Candidates are now admitted and matched on decoded text, with logical limits preserved (#233, thanks @lincicomb for the report)
+
+### Maintenance
+
+- Harden the release pipeline: robust signer import, PKCS12 compatibility, Bash 3 signer support, signing-keychain handling, and draft metadata/ID lookups (#225–#231)
 
 ## 0.14.0 - 2026-08-10
 
