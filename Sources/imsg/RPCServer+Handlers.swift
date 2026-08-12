@@ -112,17 +112,41 @@ extension RPCServer {
   }
 
   func handleSend(params: [String: Any], id: Any?) async throws {
+    try await handleSend(params: params, id: id, tracked: false)
+  }
+
+  func handleSendTracked(params: [String: Any], id: Any?) async throws {
+    try await handleSend(params: params, id: id, tracked: true)
+  }
+
+  private func handleSend(params: [String: Any], id: Any?, tracked: Bool) async throws {
     let supportedKeys = RPCParameterKeys.combining(
       RPCParameterKeys.chatTarget,
       RPCParameterKeys.replyTarget,
       [
         "to", "text", "file", "text_formatting", "textFormatting", "formatting", "service",
         "transport", "region", "allow_sms_fallback", "allowSMSFallback",
+        "attempt_id",
       ]
     )
-    let params = try RPCParameters(params, method: "send", supportedKeys: supportedKeys)
+    let method = tracked ? "send.tracked" : "send"
+    let params = try RPCParameters(params, method: method, supportedKeys: supportedKeys)
     let text = try params.string("text") ?? ""
     let file = try params.string("file") ?? ""
+    let attemptID: String?
+    if tracked {
+      guard let rawAttemptID = try params.string("attempt_id"),
+        let uuid = UUID(uuidString: rawAttemptID)
+      else {
+        throw RPCError.invalidParams("attempt_id must be a UUID")
+      }
+      attemptID = uuid.uuidString.lowercased()
+    } else {
+      guard try params.string("attempt_id") == nil else {
+        throw RPCError.invalidParams("attempt_id is only supported by send.tracked")
+      }
+      attemptID = nil
+    }
     // Optional attributed-text formatting (bold/italic/…, macOS 15+). Only the
     // IMCore bridge transport can render it; AppleScript sends stay plain.
     // Accept `text_formatting`/`textFormatting` (matching `send-rich`) plus the
@@ -163,9 +187,26 @@ extension RPCServer {
     if text.isEmpty && file.isEmpty {
       throw RPCError.invalidParams("text or file is required")
     }
+    if tracked && (text.isEmpty || !file.isEmpty) {
+      throw RPCError.invalidParams("send.tracked supports exactly one text message")
+    }
+    if tracked && transport == .applescript {
+      throw RPCError.invalidParams("send.tracked requires bridge transport")
+    }
 
     let database: RPCDatabaseResources?
-    if input.chatID != nil {
+    if tracked {
+      let required = try await databaseResources.require()
+      if let attemptID, try required.store.messageSendStatus(guid: attemptID) != nil {
+        throw DeliveryFailure(
+          disposition: .notStarted,
+          transport: .bridgeV2,
+          operation: BridgeAction.sendMessage.rawValue,
+          detail: "attempt_id already identifies a message; choose a new UUID"
+        )
+      }
+      database = required
+    } else if input.chatID != nil {
       database = try await databaseResources.require()
     } else {
       database = await databaseResources.available()
@@ -236,7 +277,8 @@ extension RPCServer {
           text: text,
           file: file,
           selectedMessageGuid: selectedMessageGuid,
-          textFormatting: textFormatting
+          textFormatting: textFormatting,
+          clientMessageGuid: attemptID
         )
         var result: [String: Any] = ["ok": true, "transport": "bridge"]
         if let guid = data["messageGuid"] as? String, !guid.isEmpty {
@@ -249,20 +291,23 @@ extension RPCServer {
         if let service = data["service"] as? String, !service.isEmpty {
           result["service"] = service
         }
+        if let attemptID {
+          result["attempt_id"] = attemptID
+        }
         respond(id: id, result: result)
         return
       } catch let failure as DeliveryFailure {
-        if transport == .bridge || selectedMessageGuid != nil || !failure.retrySafe {
+        if tracked || transport == .bridge || selectedMessageGuid != nil || !failure.retrySafe {
           throw failure
         }
       } catch let err as RPCError {
-        if transport == .bridge || selectedMessageGuid != nil {
+        if tracked || transport == .bridge || selectedMessageGuid != nil {
           throw err
         }
       } catch {
         throw RPCError.internalError(String(describing: error))
       }
-    } else if transport == .bridge {
+    } else if tracked || transport == .bridge {
       throw RPCError.invalidParams("bridge transport requires an existing chat target")
     } else if selectedMessageGuid != nil {
       throw RPCError.invalidParams(

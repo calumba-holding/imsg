@@ -529,6 +529,27 @@ Result:
 
 `id` and `guid` are best-effort. `send` returns them when the inserted row can be observed in `chat.db` after Messages accepts the send. Attachment-only sends, delayed database writes, or ambiguous direct sends may return only `{"ok": true}`.
 
+### `send.tracked`
+
+Sends exactly one text message through the already-running IMCore bridge with a
+caller-owned message GUID. This method never falls back to AppleScript and never
+retries after an uncertain bridge result.
+
+Params are the text-send subset of `send`, plus:
+
+- `attempt_id` (UUID string, required) — becomes the outgoing `IMMessage` GUID.
+
+Attachments are rejected. The method is advertised by `imsg status --json`
+only when the running injected helper reports caller-owned GUID preservation
+and reservation support; the RPC method is usable only while the Messages
+database is also readable. IDs already present in message history or reserved
+by another tracked send are rejected
+before dispatch. On success, `attempt_id`, `guid`, and `message_id` all identify
+the exact same message. If the RPC response is lost, query `message.send_status`
+with that UUID instead of matching message history by recipient, text, or
+timestamp. The UUID is a correlation marker, not authorization to read or mutate
+a message.
+
 Direct `to` sends and explicit `chat_identifier` / `chat_guid` targets remain
 usable while the database is down. In that state `send` skips history-based
 service inference, direct-chat lookup, and post-send row verification, then
